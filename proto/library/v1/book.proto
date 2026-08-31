@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package library.v1;
+
+import "google/protobuf/timestamp.proto";
+import "library/v1/common.proto";
+
+// A book title in the catalog. `total_copies`/`available_copies` are
+// computed from the book_copies table, not stored on the book itself.
+message Book {
+  int64 id = 1;
+  string isbn = 2;
+  string title = 3;
+  string author = 4;
+  string publisher = 5;
+  int32 published_year = 6;
+  string genre = 7;
+  int32 total_copies = 8;
+  int32 available_copies = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
+}
+
+message CreateBookRequest {
+  string isbn = 1;
+  string title = 2;
+  string author = 3;
+  string publisher = 4;
+  int32 published_year = 5;
+  string genre = 6;
+  // How many physical copies to create alongside the book. Defaults to 1.
+  int32 initial_copies = 7;
+}
+
+message UpdateBookRequest {
+  int64 id = 1;
+  string isbn = 2;
+  string title = 3;
+  string author = 4;
+  string publisher = 5;
+  int32 published_year = 6;
+  string genre = 7;
+}
+
+message GetBookRequest {
+  int64 id = 1;
+}
+
+message ListBooksRequest {
+  // Case-insensitive match against title or author. Empty = no filter.
+  string search = 1;
+  PageRequest page = 2;
+}
+
+message ListBooksResponse {
+  repeated Book books = 1;
+  PageResponse page = 2;
+}
+
+message AddBookCopiesRequest {
+  int64 book_id = 1;
+  // Number of additional physical copies to add. Must be > 0.
+  int32 count = 2;
+}
+
+message AddBookCopiesResponse {
+  Book book = 1;
+}
+
+service BookService {
+  rpc CreateBook(CreateBookRequest) returns (Book);
+  rpc UpdateBook(UpdateBookRequest) returns (Book);
+  rpc GetBook(GetBookRequest) returns (Book);
+  rpc ListBooks(ListBooksRequest) returns (ListBooksResponse);
+  rpc AddBookCopies(AddBookCopiesRequest) returns (AddBookCopiesResponse);
+}

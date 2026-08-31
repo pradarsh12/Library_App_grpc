@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package library.v1;
+
+// Shared pagination messages, reused by every List* RPC.
+message PageRequest {
+  // Maximum number of items to return. Server may cap this.
+  int32 page_size = 1;
+  // Opaque token returned by a previous call's PageResponse.next_page_token.
+  string page_token = 2;
+}
+
+message PageResponse {
+  // Empty when there are no more results.
+  string next_page_token = 1;
+}
+
+// Lifecycle status of a library member.
+enum MemberStatus {
+  MEMBER_STATUS_UNSPECIFIED = 0;
+  MEMBER_STATUS_ACTIVE = 1;
+  MEMBER_STATUS_INACTIVE = 2;
+  MEMBER_STATUS_SUSPENDED = 3;
+}
+
+// Status of a single physical copy of a book.
+enum CopyStatus {
+  COPY_STATUS_UNSPECIFIED = 0;
+  COPY_STATUS_AVAILABLE = 1;
+  COPY_STATUS_CHECKED_OUT = 2;
+  COPY_STATUS_LOST = 3;
+  COPY_STATUS_MAINTENANCE = 4;
+}

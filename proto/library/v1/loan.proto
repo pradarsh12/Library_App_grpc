@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package library.v1;
+
+import "google/protobuf/timestamp.proto";
+import "library/v1/common.proto";
+
+// Derived status of a loan (not stored in the DB — computed from
+// returned_at/due_at at read time). See server/mappers.py.
+enum LoanStatus {
+  LOAN_STATUS_UNSPECIFIED = 0;
+  LOAN_STATUS_ACTIVE = 1;
+  LOAN_STATUS_OVERDUE = 2;
+  LOAN_STATUS_RETURNED = 3;
+}
+
+// A single borrow event. Denormalizes book/member display fields so a
+// ListLoans result is directly usable without extra round trips.
+message Loan {
+  int64 id = 1;
+  int64 copy_id = 2;
+  int64 book_id = 3;
+  string book_title = 4;
+  int64 member_id = 5;
+  string member_name = 6;
+  google.protobuf.Timestamp borrowed_at = 7;
+  google.protobuf.Timestamp due_at = 8;
+  // Unset while the loan is still active.
+  google.protobuf.Timestamp returned_at = 9;
+  LoanStatus status = 10;
+}
+
+message BorrowBookRequest {
+  int64 book_id = 1;
+  int64 member_id = 2;
+  // Optional; server applies a default (14 days) when unset or <= 0.
+  int32 loan_period_days = 3;
+}
+
+message ReturnBookRequest {
+  int64 loan_id = 1;
+}
+
+message GetLoanRequest {
+  int64 loan_id = 1;
+}
+
+message ListLoansRequest {
+  // 0 = no filter.
+  int64 member_id = 1;
+  // 0 = no filter.
+  int64 book_id = 2;
+  // When true, only loans with returned_at IS NULL are returned.
+  bool only_active = 3;
+  PageRequest page = 4;
+}
+
+message ListLoansResponse {
+  repeated Loan loans = 1;
+  PageResponse page = 2;
+}
+
+service LoanService {
+  // Server selects an available copy of book_id internally; caller never
+  // deals with copy IDs directly.
+  rpc BorrowBook(BorrowBookRequest) returns (Loan);
+  rpc ReturnBook(ReturnBookRequest) returns (Loan);
+  rpc GetLoan(GetLoanRequest) returns (Loan);
+  // Supports "list all books a member has out" (member_id + only_active)
+  // as well as browsing loan history for a book or across the library.
+  rpc ListLoans(ListLoansRequest) returns (ListLoansResponse);
+}
