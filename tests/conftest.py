@@ -14,6 +14,13 @@ import pathlib
 import asyncpg
 import pytest
 import pytest_asyncio
+from dotenv import load_dotenv
+
+# Load .env explicitly rather than relying on some other imported module's
+# side effect (e.g. server.config) to have already done it — conftest.py's
+# TEST_DATABASE_URL below is evaluated at collection time, before pytest
+# necessarily imports anything that would trigger that side effect.
+load_dotenv()
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCHEMA_SQL = (ROOT / "db" / "schema.sql").read_text()

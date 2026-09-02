@@ -1,13 +1,31 @@
 import Link from "next/link";
-import { Badge, EmptyState, Input, LinkButton, PageHeader } from "@/components/ui";
+import { Badge, EmptyState, FetchErrorState, Input, LinkButton, PageHeader } from "@/components/ui";
 import { listBooks } from "@/lib/grpc/books";
+import { describeGrpcError } from "@/lib/grpc/errors";
+import type { ListBooksResponse } from "@/lib/grpc/types";
 
 export default async function BooksPage({
   searchParams,
 }: PageProps<"/books">) {
   const { search } = await searchParams;
   const query = typeof search === "string" ? search : "";
-  const { books } = await listBooks(query);
+
+  let result: ListBooksResponse;
+  try {
+    result = await listBooks(query);
+  } catch (error) {
+    // Expected failure (e.g. backend not running) — render inline instead
+    // of letting it crash as an uncaught exception. See error.tsx for the
+    // fallback that still exists for genuinely unexpected errors.
+    console.error("listBooks failed:", error);
+    return (
+      <div>
+        <PageHeader title="Books" />
+        <FetchErrorState message={describeGrpcError(error)} />
+      </div>
+    );
+  }
+  const { books } = result;
 
   return (
     <div>

@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { Badge, EmptyState, LinkButton, PageHeader } from "@/components/ui";
+import { Badge, EmptyState, FetchErrorState, LinkButton, PageHeader } from "@/components/ui";
 import { listBooks } from "@/lib/grpc/books";
 import { listMembers } from "@/lib/grpc/members";
 import { listLoans } from "@/lib/grpc/loans";
+import { describeGrpcError } from "@/lib/grpc/errors";
 import { formatDate } from "@/lib/grpc/format";
 import { loanStatusLabel } from "@/lib/grpc/status-labels";
+import type { Book, Loan, Member } from "@/lib/grpc/types";
 import { BorrowForm } from "./borrow-form";
 import { ReturnButton } from "./return-button";
 import { borrowBookAction, returnBookAction } from "./actions";
@@ -15,11 +17,24 @@ export default async function LoansPage({
   const { active } = await searchParams;
   const onlyActive = active !== "0";
 
-  const [{ loans }, { books }, { members }] = await Promise.all([
-    listLoans({ onlyActive }),
-    listBooks(),
-    listMembers(),
-  ]);
+  let loans: Loan[], books: Book[], members: Member[];
+  try {
+    // All three are needed for this page (borrow form + loans table), so
+    // one failure means the whole page can't render — Promise.all is fine.
+    [{ loans }, { books }, { members }] = await Promise.all([
+      listLoans({ onlyActive }),
+      listBooks(),
+      listMembers(),
+    ]);
+  } catch (error) {
+    console.error("loans page data fetch failed:", error);
+    return (
+      <div>
+        <PageHeader title="Loans" />
+        <FetchErrorState message={describeGrpcError(error)} />
+      </div>
+    );
+  }
 
   const bookOptions = books
     .filter((b) => b.availableCopies > 0)

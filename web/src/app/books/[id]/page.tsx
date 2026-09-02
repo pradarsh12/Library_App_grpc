@@ -1,8 +1,9 @@
 import { status as GrpcStatus } from "@grpc/grpc-js";
 import { notFound } from "next/navigation";
-import { PageHeader } from "@/components/ui";
+import { FetchErrorState, PageHeader } from "@/components/ui";
 import { GrpcCallError } from "@/lib/grpc/client";
 import { getBook } from "@/lib/grpc/books";
+import { describeGrpcError } from "@/lib/grpc/errors";
 import { AddCopiesForm } from "../add-copies-form";
 import { BookForm } from "../book-form";
 import { addBookCopiesAction, updateBookAction } from "../actions";
@@ -17,7 +18,16 @@ export default async function EditBookPage({ params }: PageProps<"/books/[id]">)
     if (error instanceof GrpcCallError && error.code === GrpcStatus.NOT_FOUND) {
       notFound();
     }
-    throw error;
+    // Any other failure (server down, timeout, ...) is still "expected" in
+    // the sense that it can happen during normal operation — show it
+    // inline rather than letting it become an uncaught-exception crash.
+    console.error("getBook failed:", error);
+    return (
+      <div>
+        <PageHeader title="Book" />
+        <FetchErrorState message={describeGrpcError(error)} />
+      </div>
+    );
   }
 
   return (

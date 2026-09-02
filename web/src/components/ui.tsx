@@ -88,6 +88,21 @@ export function ErrorBanner({ message }: { message?: string | null }) {
   );
 }
 
+/**
+ * Full-section fallback for when a page's data fetch itself failed (as
+ * opposed to ErrorBanner, which sits inline above a form). Used in place
+ * of a page's normal content — e.g. the books table — so a down backend
+ * shows a clear, expected message instead of an uncaught-exception crash.
+ */
+export function FetchErrorState({ message }: { message: string }) {
+  return (
+    <div className="rounded-lg border border-red-200 bg-red-50 px-6 py-8 text-center">
+      <p className="text-sm font-medium text-red-800">Couldn&apos;t load this page</p>
+      <p className="mx-auto mt-1 max-w-md text-sm text-red-700">{message}</p>
+    </div>
+  );
+}
+
 export function EmptyState({ children }: { children: ReactNode }) {
   return (
     <div className="rounded-md border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">

@@ -1,8 +1,9 @@
 import { status as GrpcStatus } from "@grpc/grpc-js";
 import { notFound } from "next/navigation";
-import { PageHeader } from "@/components/ui";
+import { FetchErrorState, PageHeader } from "@/components/ui";
 import { GrpcCallError } from "@/lib/grpc/client";
 import { getMember } from "@/lib/grpc/members";
+import { describeGrpcError } from "@/lib/grpc/errors";
 import { MemberForm } from "../member-form";
 import { updateMemberAction } from "../actions";
 
@@ -18,7 +19,13 @@ export default async function EditMemberPage({
     if (error instanceof GrpcCallError && error.code === GrpcStatus.NOT_FOUND) {
       notFound();
     }
-    throw error;
+    console.error("getMember failed:", error);
+    return (
+      <div>
+        <PageHeader title="Member" />
+        <FetchErrorState message={describeGrpcError(error)} />
+      </div>
+    );
   }
 
   return (

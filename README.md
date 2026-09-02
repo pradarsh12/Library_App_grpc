@@ -5,6 +5,53 @@ A gRPC service for a small library to manage **books**, **members**, and
 **Protocol Buffers**, and **PostgreSQL**, with a **Next.js** web frontend
 (`web/`) — see [Web frontend](#web-frontend) below.
 
+## Quick start (backend + frontend)
+
+Condensed, copy-pasteable version of the full [Setup](#setup) /
+[Running the server](#running-the-server) / [Web frontend](#web-frontend)
+sections below — read those for the "why" behind each step.
+
+**1. Configure environment variables** (must happen before step 2 —
+`docker-compose.yml` reads `.env` for the Postgres credentials):
+
+```bash
+cp .env.example .env
+# edit .env: fill in POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB
+# and update DATABASE_URL to match
+```
+
+**2. Start Postgres:**
+
+```bash
+docker compose up -d
+```
+
+**3. Run the backend** (in one terminal):
+
+> Windows only, if not already set: `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`
+> (PowerShell blocks running the venv's `Activate.ps1` script otherwise.)
+
+```bash
+python -m venv .venv
+.venv/Scripts/activate        # Windows; use `source .venv/bin/activate` on macOS/Linux
+pip install -e ".[test]"
+python -m server.main
+```
+
+Leave this running — it logs `Neighborhood Library gRPC server listening
+on [::]:50051` once it's up.
+
+**4. Run the frontend** (in a second terminal):
+
+```bash
+cd web
+npm install
+cp .env.local.example .env.local   # defaults already match a local server
+npm run dev
+```
+
+**5. Open the app:** http://localhost:3000
+
 ## Why async gRPC?
 
 The server uses `grpc.aio` (not the sync `grpc.server`) together with
@@ -89,26 +136,43 @@ runs inside a transaction. If no copy is available, the RPC fails with
 
 - Python 3.11+ (tested with 3.14)
 - Docker Desktop (for Postgres via `docker-compose.yml`)
+- Node.js 20+ (only needed for the `web/` frontend — see [Web frontend](#web-frontend))
 
 ## Setup
 
-### 1. Start Postgres
+### 1. Configure environment variables
+
+```bash
+cp .env.example .env
+```
+
+`.env.example` uses placeholder values (`USERNAME`/`PASSWORD`/`DBNAME`), so
+this step is required, and must happen **before** step 2 — fill in real
+credentials in `.env` for `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB`
+(and update `DATABASE_URL` to match). `docker-compose.yml` reads these to
+create the Postgres role/db; if `.env` doesn't exist yet, Docker Compose
+substitutes empty values and Postgres fails to start.
+
+### 2. Start Postgres
 
 ```bash
 docker compose up -d
 ```
 
-This starts Postgres 16 on `localhost:5432` (db/user/pass all `library`)
-and automatically applies `db/schema.sql` and `db/seed.sql`
-on first boot (via `docker-entrypoint-initdb.d`). To re-apply after schema
+This starts Postgres 16 on `localhost:5432` using the credentials from
+`.env`, and automatically applies `db/schema.sql` and `db/seed.sql` on
+first boot (via `docker-entrypoint-initdb.d`). To re-apply after schema
 changes, either `docker compose down -v` (drops the volume) and start
-again, or run the SQL manually:
+again, or run the SQL manually against `$DATABASE_URL` from your `.env`:
 
 ```bash
-psql postgresql://library:library@localhost:5432/library -f db/schema.sql
+psql "$DATABASE_URL" -f db/schema.sql
 ```
 
-### 2. Create a virtualenv and install dependencies
+### 3. Create a virtualenv and install dependencies
+
+> Windows only, if not already set: `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`
+> (PowerShell blocks running the venv's `Activate.ps1` script otherwise.)
 
 ```bash
 python -m venv .venv
@@ -116,17 +180,6 @@ python -m venv .venv
 # source .venv/bin/activate   # macOS/Linux
 pip install -e ".[test]"
 ```
-
-### 3. Configure environment variables
-
-```bash
-cp .env.example .env
-```
-
-`.env.example` uses placeholder values (`USERNAME`/`PASSWORD`/`DBNAME`), so
-this step is required — fill in real credentials in `.env` that match
-`POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB`, which `docker-compose.yml`
-reads to create the Postgres role/db.
 
 ### 4. (Re)generate the protobuf/gRPC stubs
 
@@ -229,6 +282,8 @@ npm run dev
 ```
 
 Then open http://localhost:3000.
+
+## Known simplifications
 
 - `UpdateMember`/`UpdateBook` replace the whole record (no field masks); an
   omitted `status` on `UpdateMember` resets it to `active`.

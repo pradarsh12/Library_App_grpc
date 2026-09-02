@@ -1,14 +1,29 @@
 import Link from "next/link";
-import { Badge, EmptyState, Input, LinkButton, PageHeader } from "@/components/ui";
+import { Badge, EmptyState, FetchErrorState, Input, LinkButton, PageHeader } from "@/components/ui";
 import { listMembers } from "@/lib/grpc/members";
+import { describeGrpcError } from "@/lib/grpc/errors";
 import { memberStatusLabel } from "@/lib/grpc/status-labels";
+import type { ListMembersResponse } from "@/lib/grpc/types";
 
 export default async function MembersPage({
   searchParams,
 }: PageProps<"/members">) {
   const { search } = await searchParams;
   const query = typeof search === "string" ? search : "";
-  const { members } = await listMembers(query);
+
+  let result: ListMembersResponse;
+  try {
+    result = await listMembers(query);
+  } catch (error) {
+    console.error("listMembers failed:", error);
+    return (
+      <div>
+        <PageHeader title="Members" />
+        <FetchErrorState message={describeGrpcError(error)} />
+      </div>
+    );
+  }
+  const { members } = result;
 
   return (
     <div>

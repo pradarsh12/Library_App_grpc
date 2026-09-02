@@ -74,29 +74,40 @@ export class GrpcCallError extends Error {
 
 type UnaryMethod<TRequest, TResponse> = (
   request: TRequest,
+  options: grpc.CallOptions,
   callback: (error: grpc.ServiceError | null, response: TResponse) => void
 ) => grpc.ClientUnaryCall;
+
+const DEFAULT_TIMEOUT_MS = 8_000;
 
 /**
  * Promisifies a unary grpc-js call. The dynamically-loaded clients above
  * have no static method types (they're built at runtime from the .proto
  * files), so callers name the RPC and supply the request/response types
  * explicitly, e.g. `call<GetBookRequest, Book>(bookClient, "GetBook", req)`.
+ *
+ * Always passes a deadline: if the backend is down, TCP refuses the
+ * connection near-instantly and this rejects fast on its own — but if it's
+ * merely unreachable (hung, firewalled, DB stuck) a call with no deadline
+ * can hang indefinitely and leave the page loading forever. The deadline
+ * turns that into a clean DEADLINE_EXCEEDED within a bounded time.
  */
 export function call<TRequest, TResponse>(
   client: grpc.Client,
   methodName: string,
-  request: TRequest
+  request: TRequest,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS
 ): Promise<TResponse> {
   const untyped = client as unknown as Record<
     string,
     UnaryMethod<TRequest, TResponse>
   >;
+  const options: grpc.CallOptions = { deadline: Date.now() + timeoutMs };
   return new Promise((resolve, reject) => {
     // Call via `untyped[methodName](...)`, not a variable holding the
     // function, so `this` inside grpc-js's implementation stays bound to
     // `client` (it needs `this.channel` etc.).
-    untyped[methodName](request, (error, response) => {
+    untyped[methodName](request, options, (error, response) => {
       if (error) {
         reject(new GrpcCallError(error.code, error.details || error.message));
       } else {
