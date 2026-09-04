@@ -23,7 +23,7 @@ export default function HomePage() {
     <div>
       <h1 className="text-2xl font-semibold text-slate-900">Welcome</h1>
       <p className="mt-1 text-sm text-slate-500">
-        A front end for the Neighborhood Library gRPC service.
+        Neighborhood Library
       </p>
       <div className="mt-8 grid gap-4 sm:grid-cols-3">
         {sections.map((s) => (
