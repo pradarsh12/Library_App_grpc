@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { Button, ErrorBanner, Field, Input, Select } from "@/components/ui";
+import { Button, ErrorBanner, Field, Input, PendingOverlay, Select } from "@/components/ui";
 import type { FormState } from "./actions";
 
 export function BorrowForm({
@@ -17,6 +17,7 @@ export function BorrowForm({
 
   return (
     <form action={formAction} className="space-y-4 rounded-lg border border-slate-200 bg-white p-4">
+      <PendingOverlay show={pending} label="Borrowing book…" />
       <ErrorBanner message={state.error} />
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label="Book" htmlFor="bookId" required>

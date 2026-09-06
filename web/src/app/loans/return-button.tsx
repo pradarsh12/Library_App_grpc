@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { Button } from "@/components/ui";
+import { Button, PendingOverlay } from "@/components/ui";
 import type { FormState } from "./actions";
 
 export function ReturnButton({
@@ -13,6 +13,7 @@ export function ReturnButton({
 
   return (
     <form action={formAction}>
+      <PendingOverlay show={pending} label="Returning book…" />
       <Button type="submit" variant="secondary" disabled={pending}>
         {pending ? "Returning…" : "Return"}
       </Button>

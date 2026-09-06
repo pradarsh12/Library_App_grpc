@@ -5,6 +5,43 @@ A gRPC service for a small library to manage **books**, **members**, and
 **Protocol Buffers**, and **PostgreSQL**, with a **Next.js** web frontend
 (`web/`) — see [Web frontend](#web-frontend) below.
 
+## What this application can do
+
+Three gRPC services define everything the app supports (`BookService`,
+`MemberService`, `LoanService` — see `proto/library/v1/*.proto` for the
+exact RPCs and message shapes). Every operation below is available both as
+a direct gRPC call and through the `web/` UI.
+
+**Books**
+- Create a book, with an initial number of physical copies
+- View a book, including how many of its copies are currently available
+- List/search the catalog by title or author
+- Update a book's details (title, author, ISBN, publisher, year, genre)
+- Add more physical copies to an existing title
+
+**Members**
+- Register a member
+- View a member's details
+- List/search members by name or email
+- Update a member's details, including their status
+  (`active` / `inactive` / `suspended`)
+
+**Loans**
+- Borrow a book — the server automatically picks an available copy; you
+  never handle copy IDs directly (see
+  [Handling "already checked out"](#handling-already-checked-out))
+- Return a borrowed book
+- View a single loan
+- List loans, filterable by member, by book, and/or active-only vs. full
+  history (a loan's active/overdue/returned status is computed at read
+  time from `borrowed_at`/`due_at`/`returned_at`, not stored)
+
+**Not supported, by design:** deleting a book or a member (there's no
+`DeleteBook`/`DeleteMember` RPC — deactivate a member via their `status`
+instead), editing or deleting a loan once created, and
+authentication/authorization. See
+[Known simplifications](#known-simplifications) for the full list.
+
 ## Quick start (backend + frontend)
 
 Condensed, copy-pasteable version of the full [Setup](#setup) /
@@ -134,9 +171,24 @@ runs inside a transaction. If no copy is available, the RPC fails with
 
 ## Prerequisites
 
-- Python 3.11+ (tested with 3.14)
-- Docker Desktop (for Postgres via `docker-compose.yml`)
-- Node.js 20+ (only needed for the `web/` frontend — see [Web frontend](#web-frontend))
+These are **hard minimums**, not just recommendations — each one is
+enforced by the tooling itself, so setup fails outright on an older
+version rather than behaving unpredictably:
+
+| Tool | Minimum | Why |
+|---|---|---|
+| **Python** | **3.11** | Enforced by `pyproject.toml` (`requires-python = ">=3.11"`) — `pip install -e .` refuses to install on anything older. Verified working here on 3.12.10. |
+| **Docker Desktop** | Any version with **Compose V2** (the `docker compose` command) | `docker-compose.yml` uses the modern Compose file format with no `version:` key, which the old standalone `docker-compose` (V1) doesn't support. |
+| **Node.js** | **20.9** | Required by Next.js 16 itself — its own `package.json` declares `"engines": {"node": ">=20.9.0"}`. Only needed for the `web/` frontend, see [Web frontend](#web-frontend). |
+| **PostgreSQL** | 16 | Provisioned automatically via the `postgres:16` image in `docker-compose.yml` — no local Postgres install needed. |
+
+Check what you have installed:
+
+```bash
+python --version
+docker --version && docker compose version
+node --version
+```
 
 ## Setup
 
@@ -152,6 +204,24 @@ credentials in `.env` for `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB`
 (and update `DATABASE_URL` to match). `docker-compose.yml` reads these to
 create the Postgres role/db; if `.env` doesn't exist yet, Docker Compose
 substitutes empty values and Postgres fails to start.
+
+All environment variables the server reads (via `server/config.py`,
+loaded with `python-dotenv`):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `POSTGRES_USER` | *(placeholder — must set)* | Postgres role created by `docker-compose.yml` |
+| `POSTGRES_PASSWORD` | *(placeholder — must set)* | Postgres role's password |
+| `POSTGRES_DB` | *(placeholder — must set)* | Database name created on first boot |
+| `DATABASE_URL` | *(placeholder — must set)* | Full connection string the server uses; must match the three vars above |
+| `GRPC_HOST` | `[::]` | Interface the gRPC server binds to (all interfaces, IPv4+IPv6) |
+| `GRPC_PORT` | `50051` | Port the gRPC server listens on |
+| `DB_POOL_MIN_SIZE` | `5` | Minimum size of the asyncpg connection pool |
+| `DB_POOL_MAX_SIZE` | `20` | Maximum size of the asyncpg connection pool |
+| `DEFAULT_LOAN_PERIOD_DAYS` | `14` | Applied to `BorrowBook` when the caller doesn't specify `loan_period_days` |
+
+Only the four Postgres-related variables are required; the rest have
+working defaults (`server/config.py` falls back to them if unset).
 
 ### 2. Start Postgres
 
@@ -180,6 +250,18 @@ python -m venv .venv
 # source .venv/bin/activate   # macOS/Linux
 pip install -e ".[test]"
 ```
+
+This installs every required library, all pinned in `pyproject.toml`:
+
+| Library | Used for |
+|---|---|
+| `grpcio` | The gRPC runtime itself (`grpc.aio` async server) |
+| `grpcio-tools` | Compiles `.proto` files into Python stubs (step 4 below) |
+| `grpcio-reflection` | Powers server reflection, so `grpcurl` works without `.proto` files on the client |
+| `protobuf` | Protocol Buffers message runtime |
+| `asyncpg` | Async-native PostgreSQL driver |
+| `python-dotenv` | Loads `.env` into the process environment |
+| `pytest` / `pytest-asyncio` | Test runner (`[test]` extra only — not needed to run the server itself) |
 
 ### 4. (Re)generate the protobuf/gRPC stubs
 
@@ -263,12 +345,10 @@ web/
   .env.local.example   GRPC_SERVER_ADDR (defaults to localhost:50051)
 ```
 
-**Note on "CRUD":** the backend only exposes Create/Read/Update for books
-and members (see `proto/library/v1/*.proto` — there's no `DeleteBook` or
-`DeleteMember` RPC), so the UI doesn't have delete buttons either.
-Deactivating a member is done by editing their `status` to
-`Inactive`/`Suspended`, matching how the backend itself models it. Loans
-aren't edited/deleted — only borrowed and returned.
+The UI mirrors the backend's capabilities exactly — see
+[What this application can do](#what-this-application-can-do) for the
+full list of supported operations (in short: no delete buttons, since
+there's no delete RPC either).
 
 ### Running it
 

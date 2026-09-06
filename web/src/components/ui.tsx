@@ -103,6 +103,34 @@ export function FetchErrorState({ message }: { message: string }) {
   );
 }
 
+/**
+ * Full-viewport overlay + spinner shown while a create/update/borrow/return
+ * (or any other mutation) is in flight, driven by the `pending` flag each
+ * form already gets back from `useActionState`. Replaces relying on
+ * Next.js's dev-only route indicator badge to notice something's
+ * happening — that badge is a debug affordance and isn't present in
+ * production at all, so CRUD forms need their own feedback regardless.
+ */
+export function PendingOverlay({
+  show,
+  label = "Saving…",
+}: {
+  show: boolean;
+  label?: string;
+}) {
+  if (!show) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-slate-900/40 backdrop-blur-[1px]"
+    >
+      <div className="h-10 w-10 animate-spin rounded-full border-4 border-white/30 border-t-white" />
+      <p className="text-sm font-medium text-white">{label}</p>
+    </div>
+  );
+}
+
 export function EmptyState({ children }: { children: ReactNode }) {
   return (
     <div className="rounded-md border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">

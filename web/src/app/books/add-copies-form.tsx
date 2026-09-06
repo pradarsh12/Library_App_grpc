@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { Button, ErrorBanner, Input } from "@/components/ui";
+import { Button, ErrorBanner, Input, PendingOverlay } from "@/components/ui";
 import type { FormState } from "./actions";
 
 export function AddCopiesForm({
@@ -13,6 +13,7 @@ export function AddCopiesForm({
 
   return (
     <form action={formAction} className="flex items-end gap-2">
+      <PendingOverlay show={pending} label="Adding copies…" />
       <div className="w-24">
         <label htmlFor="count" className="mb-1 block text-sm font-medium text-slate-700">
           Add copies

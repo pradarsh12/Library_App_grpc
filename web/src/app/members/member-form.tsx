@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { Button, ErrorBanner, Field, Input, Select } from "@/components/ui";
+import { Button, ErrorBanner, Field, Input, PendingOverlay, Select } from "@/components/ui";
 import { memberStatusLabel } from "@/lib/grpc/status-labels";
 import type { Member } from "@/lib/grpc/types";
 import type { FormState } from "./actions";
@@ -25,6 +25,7 @@ export function MemberForm({
 
   return (
     <form action={formAction} className="space-y-4">
+      <PendingOverlay show={pending} label="Saving member…" />
       <ErrorBanner message={state.error} />
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="First name" htmlFor="firstName" required>
