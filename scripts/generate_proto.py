@@ -4,8 +4,6 @@ Run with the project's venv active:
 
     python scripts/generate_proto.py
 
-Cross-platform equivalent of a small shell script; kept as Python so it
-works the same on Windows/macOS/Linux without a separate .sh/.ps1 pair.
 """
 
 from __future__ import annotations

@@ -42,9 +42,13 @@ CREATE TABLE IF NOT EXISTS book_copies (
 CREATE INDEX IF NOT EXISTS idx_book_copies_book_id ON book_copies(book_id);
 
 -- One row per borrow event. returned_at IS NULL means the copy is still out.
+-- book_id denormalizes book_copies.book_id (the copy's book) so a
+-- per-member-per-book uniqueness constraint can be declared directly on
+-- this table below — a unique index can't reach across to another table.
 CREATE TABLE IF NOT EXISTS loans (
   id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   copy_id     BIGINT NOT NULL REFERENCES book_copies(id),
+  book_id     BIGINT NOT NULL REFERENCES books(id),
   member_id   BIGINT NOT NULL REFERENCES members(id),
   borrowed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   due_at      TIMESTAMPTZ NOT NULL,
@@ -60,3 +64,8 @@ CREATE INDEX IF NOT EXISTS idx_loans_copy_id ON loans(copy_id);
 -- active (unreturned) loan at a time, even under concurrent requests.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_loans_active_copy
   ON loans(copy_id) WHERE returned_at IS NULL;
+
+-- A member can't have two simultaneous active loans of the same book —
+-- enforced the same way as uq_loans_active_copy above.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_loans_active_member_book
+  ON loans(member_id, book_id) WHERE returned_at IS NULL;

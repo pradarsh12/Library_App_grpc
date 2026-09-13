@@ -29,7 +29,9 @@ a direct gRPC call and through the `web/` UI.
 **Loans**
 - Borrow a book — the server automatically picks an available copy; you
   never handle copy IDs directly (see
-  [Handling "already checked out"](#handling-already-checked-out))
+  [Handling "already checked out"](#handling-already-checked-out)). A
+  member can't hold two active loans of the *same* book at once — that's
+  rejected with `FAILED_PRECONDITION` even if other copies are available.
 - Return a borrowed book
 - View a single loan
 - List loans, filterable by member, by book, and/or active-only vs. full
@@ -166,6 +168,7 @@ runs inside a transaction. If no copy is available, the RPC fails with
 | Book/member/loan id not found                 | `NOT_FOUND`           |
 | Duplicate email / ISBN                        | `ALREADY_EXISTS`      |
 | No available copies to borrow                 | `FAILED_PRECONDITION` |
+| Member already has this book on loan          | `FAILED_PRECONDITION` |
 | Returning an already-returned loan             | `FAILED_PRECONDITION` |
 | Unexpected server error                       | `INTERNAL`            |
 

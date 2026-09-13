@@ -61,6 +61,39 @@ async def test_borrow_and_return_flow(pool):
     assert exc_info.value.code == grpc.StatusCode.FAILED_PRECONDITION
 
 
+async def test_borrow_same_book_twice_by_same_member_rejected(pool):
+    books, loans = BookService(pool), LoanService(pool)
+    ctx = FakeContext()
+
+    # Two copies available, so this isn't the "no copies left" case —
+    # it's specifically the one-active-loan-per-member-per-book rule.
+    book = await books.CreateBook(
+        book_pb2.CreateBookRequest(title="Dune", author="Herbert", initial_copies=2),
+        ctx,
+    )
+    member = await _make_member(pool)
+
+    await loans.BorrowBook(
+        loan_pb2.BorrowBookRequest(book_id=book.id, member_id=member.id), ctx
+    )
+
+    with pytest.raises(AbortedError) as exc_info:
+        await loans.BorrowBook(
+            loan_pb2.BorrowBookRequest(book_id=book.id, member_id=member.id), ctx
+        )
+    assert exc_info.value.code == grpc.StatusCode.FAILED_PRECONDITION
+
+    refreshed = await books.GetBook(book_pb2.GetBookRequest(id=book.id), ctx)
+    assert refreshed.available_copies == 1  # second copy never got claimed
+
+    # A different member can still borrow the remaining copy.
+    other_member = await _make_member(pool)
+    loan = await loans.BorrowBook(
+        loan_pb2.BorrowBookRequest(book_id=book.id, member_id=other_member.id), ctx
+    )
+    assert loan.status == loan_pb2.LOAN_STATUS_ACTIVE
+
+
 async def test_borrow_nonexistent_book_raises_not_found(pool):
     loans = LoanService(pool)
     member = await _make_member(pool)

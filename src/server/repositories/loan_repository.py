@@ -4,7 +4,10 @@
 `SELECT ... FOR UPDATE SKIP LOCKED` inside a transaction to atomically claim
 one available copy, plus the DB's `uq_loans_active_copy` partial unique
 index as a second line of defense, so many simultaneous `BorrowBook` calls
-for the same title never double-checkout a copy.
+for the same title never double-checkout a copy. The same pattern (app-level
+check + partial unique index as the concurrency-safe backstop) also
+prevents a member from holding two simultaneous active loans of the same
+book — see `uq_loans_active_member_book` in db/schema.sql.
 """
 
 from __future__ import annotations
@@ -17,13 +20,12 @@ from server.errors import ConflictError, NotFoundError
 
 _LOAN_SELECT = """
     SELECT
-        l.id, l.copy_id, l.member_id, l.borrowed_at, l.due_at, l.returned_at,
-        bc.book_id AS book_id,
+        l.id, l.copy_id, l.book_id, l.member_id, l.borrowed_at, l.due_at,
+        l.returned_at,
         b.title AS book_title,
         (m.first_name || ' ' || m.last_name) AS member_name
     FROM loans l
-    JOIN book_copies bc ON bc.id = l.copy_id
-    JOIN books b ON b.id = bc.book_id
+    JOIN books b ON b.id = l.book_id
     JOIN members m ON m.id = l.member_id
 """
 
@@ -45,6 +47,17 @@ async def borrow_book(
             )
             if member_exists is None:
                 raise NotFoundError(f"member {member_id} not found")
+
+            already_borrowed = await conn.fetchval(
+                """SELECT 1 FROM loans
+                   WHERE member_id = $1 AND book_id = $2 AND returned_at IS NULL""",
+                member_id,
+                book_id,
+            )
+            if already_borrowed:
+                raise ConflictError(
+                    "member already has this book on loan"
+                )
 
             copy_row = await conn.fetchrow(
                 """SELECT id FROM book_copies
@@ -71,14 +84,25 @@ async def borrow_book(
             due_at = dt.datetime.now(dt.timezone.utc) + dt.timedelta(
                 days=loan_period_days
             )
-            loan_id = await conn.fetchval(
-                """INSERT INTO loans (copy_id, member_id, due_at)
-                   VALUES ($1, $2, $3)
-                   RETURNING id""",
-                copy_id,
-                member_id,
-                due_at,
-            )
+            try:
+                loan_id = await conn.fetchval(
+                    """INSERT INTO loans (copy_id, book_id, member_id, due_at)
+                       VALUES ($1, $2, $3, $4)
+                       RETURNING id""",
+                    copy_id,
+                    book_id,
+                    member_id,
+                    due_at,
+                )
+            except asyncpg.UniqueViolationError as exc:
+                # Backstop for a concurrent BorrowBook for the same
+                # member+book slipping past the check above — see
+                # uq_loans_active_member_book in db/schema.sql.
+                if exc.constraint_name == "uq_loans_active_member_book":
+                    raise ConflictError(
+                        "member already has this book on loan"
+                    ) from exc
+                raise
             return await _fetch_loan(conn, loan_id)
 
 
@@ -125,7 +149,7 @@ async def list_loans(
         return await conn.fetch(
             f"""{_LOAN_SELECT}
                 WHERE ($1::bigint IS NULL OR l.member_id = $1)
-                  AND ($2::bigint IS NULL OR bc.book_id = $2)
+                  AND ($2::bigint IS NULL OR l.book_id = $2)
                   AND ($3::bool IS FALSE OR l.returned_at IS NULL)
                 ORDER BY l.borrowed_at DESC, l.id DESC
                 LIMIT $4 OFFSET $5""",
