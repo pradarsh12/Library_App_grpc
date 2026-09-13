@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { Button, ErrorBanner, Field, Input, PendingOverlay, Select } from "@/components/ui";
+import { useDismissingError } from "@/lib/use-dismissing-error";
 import type { FormState } from "./actions";
 
 export function BorrowForm({
@@ -14,11 +15,12 @@ export function BorrowForm({
   memberOptions: { id: string; label: string }[];
 }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, {});
+  const errorMessage = useDismissingError(state);
 
   return (
     <form action={formAction} className="space-y-4 rounded-lg border border-slate-200 bg-white p-4">
       <PendingOverlay show={pending} label="Borrowing book…" />
-      <ErrorBanner message={state.error} />
+      <ErrorBanner message={errorMessage} />
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label="Book" htmlFor="bookId" required>
           <Select id="bookId" name="bookId" required defaultValue="">

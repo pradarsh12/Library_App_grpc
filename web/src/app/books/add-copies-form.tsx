@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { Button, ErrorBanner, Input, PendingOverlay } from "@/components/ui";
+import { useDismissingError } from "@/lib/use-dismissing-error";
 import type { FormState } from "./actions";
 
 export function AddCopiesForm({
@@ -10,6 +11,7 @@ export function AddCopiesForm({
   action: (prevState: FormState, formData: FormData) => Promise<FormState>;
 }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, {});
+  const errorMessage = useDismissingError(state);
 
   return (
     <form action={formAction} className="flex items-end gap-2">
@@ -23,9 +25,9 @@ export function AddCopiesForm({
       <Button type="submit" variant="secondary" disabled={pending}>
         {pending ? "Adding…" : "Add"}
       </Button>
-      {state.error && (
+      {errorMessage && (
         <div className="ml-2">
-          <ErrorBanner message={state.error} />
+          <ErrorBanner message={errorMessage} />
         </div>
       )}
     </form>
