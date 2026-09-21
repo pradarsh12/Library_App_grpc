@@ -48,14 +48,15 @@ async def update_member(
     email: str,
     phone: str | None,
     address: str | None,
-    status: str,
+    status: str | None,
 ) -> asyncpg.Record:
     async with pool.acquire() as conn:
         try:
             row = await conn.fetchrow(
                 f"""UPDATE members
                     SET first_name = $2, last_name = $3, email = $4, phone = $5,
-                        address = $6, status = $7, updated_at = now()
+                        address = $6, status = COALESCE($7, status),
+                        updated_at = now()
                     WHERE id = $1
                     RETURNING {_MEMBER_COLUMNS}""",
                 member_id,

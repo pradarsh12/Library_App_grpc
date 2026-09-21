@@ -58,10 +58,10 @@ class MemberService(member_pb2_grpc.MemberServiceServicer):
         address = validation.optional_text(
             request.address, "address", max_length=validation.MAX_ADDRESS_LEN
         )
-        # An unset `status` field (MEMBER_STATUS_UNSPECIFIED) defaults to
-        # "active" -- this API expects the full record on every update
-        # rather than supporting partial field masks.
-        status = mappers.member_status_to_db(request.status) or "active"
+        # An unset `status` (MEMBER_STATUS_UNSPECIFIED) leaves the member's
+        # current status unchanged, so editing contact details can't
+        # silently reactivate a suspended member.
+        status = mappers.member_status_to_db(request.status)
 
         row = await member_repository.update_member(
             self._pool,
