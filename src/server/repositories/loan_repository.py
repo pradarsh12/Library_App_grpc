@@ -1,13 +1,11 @@
-"""Data access for borrow/return operations.
+"""SQL for loans.
 
-`borrow_book` is the concurrency-critical path: it uses
-`SELECT ... FOR UPDATE SKIP LOCKED` inside a transaction to atomically claim
-one available copy, plus the DB's `uq_loans_active_copy` partial unique
-index as a second line of defense, so many simultaneous `BorrowBook` calls
-for the same title never double-checkout a copy. The same pattern (app-level
-check + partial unique index as the concurrency-safe backstop) also
-prevents a member from holding two simultaneous active loans of the same
-book — see `uq_loans_active_member_book` in db/schema.sql.
+Concurrency safety for borrowing rests on two database-level guarantees this
+module cooperates with: the copy is claimed with `FOR UPDATE SKIP LOCKED`
+(see `BookRepository.claim_available_copy`), and the partial unique indexes
+`uq_loans_active_copy` / `uq_loans_active_member_book` in db/schema.sql
+reject a double checkout even if two transactions race past the
+application-level checks in `LoanService`.
 """
 
 from __future__ import annotations
@@ -16,7 +14,8 @@ import datetime as dt
 
 import asyncpg
 
-from server.errors import ConflictError, NotFoundError
+from server.domain.models import Loan
+from server.errors import ConflictError
 
 _LOAN_SELECT = """
     SELECT
@@ -30,123 +29,82 @@ _LOAN_SELECT = """
 """
 
 
-async def _fetch_loan(conn: asyncpg.Connection, loan_id: int) -> asyncpg.Record:
-    row = await conn.fetchrow(f"{_LOAN_SELECT} WHERE l.id = $1", loan_id)
-    if row is None:
-        raise NotFoundError(f"loan {loan_id} not found")
-    return row
+def _to_loan(row: asyncpg.Record) -> Loan:
+    return Loan(
+        id=row["id"],
+        copy_id=row["copy_id"],
+        book_id=row["book_id"],
+        book_title=row["book_title"],
+        member_id=row["member_id"],
+        member_name=row["member_name"],
+        borrowed_at=row["borrowed_at"],
+        due_at=row["due_at"],
+        returned_at=row["returned_at"],
+    )
 
 
-async def borrow_book(
-    pool: asyncpg.Pool, *, book_id: int, member_id: int, loan_period_days: int
-) -> asyncpg.Record:
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            member_exists = await conn.fetchval(
-                "SELECT 1 FROM members WHERE id = $1", member_id
-            )
-            if member_exists is None:
-                raise NotFoundError(f"member {member_id} not found")
+class LoanRepository:
+    def __init__(self, conn: asyncpg.Connection) -> None:
+        self._conn = conn
 
-            already_borrowed = await conn.fetchval(
-                """SELECT 1 FROM loans
-                   WHERE member_id = $1 AND book_id = $2 AND returned_at IS NULL""",
-                member_id,
-                book_id,
-            )
-            if already_borrowed:
-                raise ConflictError(
-                    "member already has this book on loan"
-                )
+    async def get(self, loan_id: int) -> Loan | None:
+        row = await self._conn.fetchrow(f"{_LOAN_SELECT} WHERE l.id = $1", loan_id)
+        return _to_loan(row) if row else None
 
-            copy_row = await conn.fetchrow(
-                """SELECT id FROM book_copies
-                   WHERE book_id = $1 AND status = 'available'
-                   ORDER BY id
-                   LIMIT 1
-                   FOR UPDATE SKIP LOCKED""",
-                book_id,
-            )
-            if copy_row is None:
-                book_exists = await conn.fetchval(
-                    "SELECT 1 FROM books WHERE id = $1", book_id
-                )
-                if book_exists is None:
-                    raise NotFoundError(f"book {book_id} not found")
-                raise ConflictError(f"no available copies of book {book_id}")
+    async def exists(self, loan_id: int) -> bool:
+        found = await self._conn.fetchval("SELECT 1 FROM loans WHERE id = $1", loan_id)
+        return found is not None
 
-            copy_id = copy_row["id"]
-            await conn.execute(
-                """UPDATE book_copies SET status = 'checked_out', updated_at = now()
-                   WHERE id = $1""",
+    async def has_active_loan(self, member_id: int, book_id: int) -> bool:
+        found = await self._conn.fetchval(
+            """SELECT 1 FROM loans
+               WHERE member_id = $1 AND book_id = $2 AND returned_at IS NULL""",
+            member_id,
+            book_id,
+        )
+        return found is not None
+
+    async def insert(
+        self, *, copy_id: int, book_id: int, member_id: int, due_at: dt.datetime
+    ) -> int:
+        try:
+            return await self._conn.fetchval(
+                """INSERT INTO loans (copy_id, book_id, member_id, due_at)
+                   VALUES ($1, $2, $3, $4)
+                   RETURNING id""",
                 copy_id,
+                book_id,
+                member_id,
+                due_at,
             )
-            due_at = dt.datetime.now(dt.timezone.utc) + dt.timedelta(
-                days=loan_period_days
-            )
-            try:
-                loan_id = await conn.fetchval(
-                    """INSERT INTO loans (copy_id, book_id, member_id, due_at)
-                       VALUES ($1, $2, $3, $4)
-                       RETURNING id""",
-                    copy_id,
-                    book_id,
-                    member_id,
-                    due_at,
-                )
-            except asyncpg.UniqueViolationError as exc:
-                # Backstop for a concurrent BorrowBook for the same
-                # member+book slipping past the check above — see
-                # uq_loans_active_member_book in db/schema.sql.
-                if exc.constraint_name == "uq_loans_active_member_book":
-                    raise ConflictError(
-                        "member already has this book on loan"
-                    ) from exc
-                raise
-            return await _fetch_loan(conn, loan_id)
+        except asyncpg.UniqueViolationError as exc:
+            # Backstop for a concurrent borrow of the same book by the same
+            # member slipping past the service's check.
+            if exc.constraint_name == "uq_loans_active_member_book":
+                raise ConflictError("member already has this book on loan") from exc
+            raise
 
+    async def mark_returned(self, loan_id: int) -> int | None:
+        """Close an open loan; returns its copy id, or None when the loan is
+        missing or was already returned."""
+        row = await self._conn.fetchrow(
+            """UPDATE loans SET returned_at = now(), updated_at = now()
+               WHERE id = $1 AND returned_at IS NULL
+               RETURNING copy_id""",
+            loan_id,
+        )
+        return row["copy_id"] if row else None
 
-async def return_book(pool: asyncpg.Pool, loan_id: int) -> asyncpg.Record:
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            row = await conn.fetchrow(
-                """UPDATE loans SET returned_at = now(), updated_at = now()
-                   WHERE id = $1 AND returned_at IS NULL
-                   RETURNING copy_id""",
-                loan_id,
-            )
-            if row is None:
-                exists = await conn.fetchval(
-                    "SELECT 1 FROM loans WHERE id = $1", loan_id
-                )
-                if exists is None:
-                    raise NotFoundError(f"loan {loan_id} not found")
-                raise ConflictError(f"loan {loan_id} has already been returned")
-
-            await conn.execute(
-                """UPDATE book_copies SET status = 'available', updated_at = now()
-                   WHERE id = $1""",
-                row["copy_id"],
-            )
-            return await _fetch_loan(conn, loan_id)
-
-
-async def get_loan(pool: asyncpg.Pool, loan_id: int) -> asyncpg.Record:
-    async with pool.acquire() as conn:
-        return await _fetch_loan(conn, loan_id)
-
-
-async def list_loans(
-    pool: asyncpg.Pool,
-    *,
-    member_id: int | None,
-    book_id: int | None,
-    only_active: bool,
-    limit: int,
-    offset: int,
-) -> list[asyncpg.Record]:
-    async with pool.acquire() as conn:
-        return await conn.fetch(
+    async def list(
+        self,
+        *,
+        member_id: int | None,
+        book_id: int | None,
+        only_active: bool,
+        limit: int,
+        offset: int,
+    ) -> list[Loan]:
+        rows = await self._conn.fetch(
             f"""{_LOAN_SELECT}
                 WHERE ($1::bigint IS NULL OR l.member_id = $1)
                   AND ($2::bigint IS NULL OR l.book_id = $2)
@@ -159,3 +117,4 @@ async def list_loans(
             limit,
             offset,
         )
+        return [_to_loan(r) for r in rows]

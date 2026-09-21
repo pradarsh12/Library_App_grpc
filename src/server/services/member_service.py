@@ -1,96 +1,109 @@
-"""MemberService gRPC servicer."""
+"""Member use cases: validation and transaction boundaries."""
 
 from __future__ import annotations
 
-import asyncpg
-
-from library.v1 import member_pb2, member_pb2_grpc
-
-from server import mappers, validation
-from server.errors import handle_errors
-from server.pagination import build_page_response, parse_page
-from server.repositories import member_repository
+from server import validation
+from server.db.database import Database
+from server.domain.models import Member, MemberStatus
+from server.domain.pagination import Page, PageParams, paginate
+from server.errors import NotFoundError
 
 
-class MemberService(member_pb2_grpc.MemberServiceServicer):
-    def __init__(self, pool: asyncpg.Pool) -> None:
-        self._pool = pool
+def _not_found(member_id: int) -> NotFoundError:
+    return NotFoundError(f"member {member_id} not found")
 
-    @handle_errors
-    async def CreateMember(self, request: member_pb2.CreateMemberRequest, context):
-        first_name = validation.require_non_empty(
-            request.first_name, "first_name", max_length=validation.MAX_NAME_LEN
-        )
-        last_name = validation.require_non_empty(
-            request.last_name, "last_name", max_length=validation.MAX_NAME_LEN
-        )
-        email = validation.require_email(request.email)
-        phone = validation.optional_text(
-            request.phone, "phone", max_length=validation.MAX_PHONE_LEN
-        )
-        address = validation.optional_text(
-            request.address, "address", max_length=validation.MAX_ADDRESS_LEN
-        )
 
-        row = await member_repository.create_member(
-            self._pool,
+class MemberService:
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    @staticmethod
+    def _validated_fields(
+        *,
+        first_name: str,
+        last_name: str,
+        email: str,
+        phone: str,
+        address: str,
+    ) -> dict:
+        return {
+            "first_name": validation.require_non_empty(
+                first_name, "first_name", max_length=validation.MAX_NAME_LEN
+            ),
+            "last_name": validation.require_non_empty(
+                last_name, "last_name", max_length=validation.MAX_NAME_LEN
+            ),
+            "email": validation.require_email(email),
+            "phone": validation.optional_text(
+                phone, "phone", max_length=validation.MAX_PHONE_LEN
+            ),
+            "address": validation.optional_text(
+                address, "address", max_length=validation.MAX_ADDRESS_LEN
+            ),
+        }
+
+    async def create_member(
+        self,
+        *,
+        first_name: str,
+        last_name: str,
+        email: str,
+        phone: str,
+        address: str,
+    ) -> Member:
+        fields = self._validated_fields(
             first_name=first_name,
             last_name=last_name,
             email=email,
             phone=phone,
             address=address,
         )
-        return mappers.member_to_proto(row)
+        async with self._db.session() as repos:
+            return await repos.members.insert(**fields)
 
-    @handle_errors
-    async def UpdateMember(self, request: member_pb2.UpdateMemberRequest, context):
-        member_id = validation.require_positive_id(request.id, "id")
-        first_name = validation.require_non_empty(
-            request.first_name, "first_name", max_length=validation.MAX_NAME_LEN
-        )
-        last_name = validation.require_non_empty(
-            request.last_name, "last_name", max_length=validation.MAX_NAME_LEN
-        )
-        email = validation.require_email(request.email)
-        phone = validation.optional_text(
-            request.phone, "phone", max_length=validation.MAX_PHONE_LEN
-        )
-        address = validation.optional_text(
-            request.address, "address", max_length=validation.MAX_ADDRESS_LEN
-        )
-        # An unset `status` (MEMBER_STATUS_UNSPECIFIED) leaves the member's
-        # current status unchanged, so editing contact details can't
-        # silently reactivate a suspended member.
-        status = mappers.member_status_to_db(request.status)
-
-        row = await member_repository.update_member(
-            self._pool,
-            member_id=member_id,
+    async def update_member(
+        self,
+        *,
+        member_id: int,
+        first_name: str,
+        last_name: str,
+        email: str,
+        phone: str,
+        address: str,
+        status: MemberStatus | None,
+    ) -> Member:
+        """A `status` of None leaves the member's current status unchanged,
+        so editing contact details can't silently reactivate a suspended
+        member."""
+        member_id = validation.require_positive_id(member_id, "id")
+        fields = self._validated_fields(
             first_name=first_name,
             last_name=last_name,
             email=email,
             phone=phone,
             address=address,
-            status=status,
         )
-        return mappers.member_to_proto(row)
+        async with self._db.session() as repos:
+            member = await repos.members.update(member_id, status=status, **fields)
+        if member is None:
+            raise _not_found(member_id)
+        return member
 
-    @handle_errors
-    async def GetMember(self, request: member_pb2.GetMemberRequest, context):
-        member_id = validation.require_positive_id(request.id, "id")
-        row = await member_repository.get_member(self._pool, member_id)
-        return mappers.member_to_proto(row)
+    async def get_member(self, member_id: int) -> Member:
+        member_id = validation.require_positive_id(member_id, "id")
+        async with self._db.session() as repos:
+            member = await repos.members.get(member_id)
+        if member is None:
+            raise _not_found(member_id)
+        return member
 
-    @handle_errors
-    async def ListMembers(self, request: member_pb2.ListMembersRequest, context):
-        size, offset = parse_page(request.page)
-        rows = await member_repository.list_members(
-            self._pool,
-            search=validation.require_search(request.search),
-            limit=size + 1,
-            offset=offset,
-        )
-        page_rows, page = build_page_response(rows, size, offset)
-        return member_pb2.ListMembersResponse(
-            members=[mappers.member_to_proto(r) for r in page_rows], page=page
-        )
+    async def list_members(
+        self, *, search: str, page_size: int, offset: int
+    ) -> Page[Member]:
+        search = validation.require_search(search)
+        params = PageParams.of(page_size, offset)
+        async with self._db.session() as repos:
+            members = await repos.members.list(
+                search=search, limit=params.size + 1, offset=params.offset
+            )
+        return paginate(members, params)

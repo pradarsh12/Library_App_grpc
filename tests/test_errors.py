@@ -8,12 +8,8 @@ import asyncpg
 import grpc
 import pytest
 
-from server.errors import (
-    ConflictError,
-    NotFoundError,
-    ValidationError,
-    handle_errors,
-)
+from server.api.error_handling import handle_errors
+from server.errors import ConflictError, NotFoundError, ValidationError
 
 from _helpers import AbortedError, FakeContext
 

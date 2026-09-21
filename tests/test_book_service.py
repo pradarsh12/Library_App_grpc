@@ -4,13 +4,12 @@ import grpc
 import pytest
 
 from library.v1 import book_pb2
-from server.services.book_service import BookService
 
-from _helpers import AbortedError, FakeContext
+from _helpers import AbortedError, FakeContext, book_api, loan_api, member_api
 
 
 async def test_create_and_get_book(pool):
-    service = BookService(pool)
+    service = book_api(pool)
     ctx = FakeContext()
 
     created = await service.CreateBook(
@@ -29,7 +28,7 @@ async def test_create_and_get_book(pool):
 
 
 async def test_create_book_requires_title():
-    service = BookService(pool=None)  # never reaches the DB
+    service = book_api(pool=None)  # never reaches the DB
     with pytest.raises(AbortedError) as exc_info:
         await service.CreateBook(
             book_pb2.CreateBookRequest(title="", author="Someone"), FakeContext()
@@ -38,14 +37,14 @@ async def test_create_book_requires_title():
 
 
 async def test_get_missing_book_raises_not_found(pool):
-    service = BookService(pool)
+    service = book_api(pool)
     with pytest.raises(AbortedError) as exc_info:
         await service.GetBook(book_pb2.GetBookRequest(id=999_999), FakeContext())
     assert exc_info.value.code == grpc.StatusCode.NOT_FOUND
 
 
 async def test_add_book_copies_increases_availability(pool):
-    service = BookService(pool)
+    service = book_api(pool)
     ctx = FakeContext()
     book = await service.CreateBook(
         book_pb2.CreateBookRequest(title="1984", author="Orwell", initial_copies=1),
@@ -60,7 +59,7 @@ async def test_add_book_copies_increases_availability(pool):
 
 
 async def test_duplicate_isbn_rejected(pool):
-    service = BookService(pool)
+    service = book_api(pool)
     ctx = FakeContext()
     await service.CreateBook(
         book_pb2.CreateBookRequest(isbn="123", title="Book A", author="X"), ctx
@@ -81,14 +80,14 @@ async def test_duplicate_isbn_rejected(pool):
     ],
 )
 async def test_create_book_rejects_oversized_input(kwargs):
-    service = BookService(pool=None)  # never reaches the DB
+    service = book_api(pool=None)  # never reaches the DB
     with pytest.raises(AbortedError) as exc_info:
         await service.CreateBook(book_pb2.CreateBookRequest(**kwargs), FakeContext())
     assert exc_info.value.code == grpc.StatusCode.INVALID_ARGUMENT
 
 
 async def test_add_book_copies_rejects_huge_count():
-    service = BookService(pool=None)
+    service = book_api(pool=None)
     with pytest.raises(AbortedError) as exc_info:
         await service.AddBookCopies(
             book_pb2.AddBookCopiesRequest(book_id=1, count=10_000_000), FakeContext()
@@ -100,7 +99,7 @@ async def test_add_book_copies_rejects_huge_count():
 async def test_list_books_rejects_invalid_page_token(token):
     from library.v1 import common_pb2
 
-    service = BookService(pool=None)
+    service = book_api(pool=None)
     with pytest.raises(AbortedError) as exc_info:
         await service.ListBooks(
             book_pb2.ListBooksRequest(page=common_pb2.PageRequest(page_token=token)),

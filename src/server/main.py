@@ -3,8 +3,9 @@
     python -m server.main
 
 Builds an async grpc.aio server backed by a single shared asyncpg pool,
-registers the three servicers plus gRPC reflection (so `grpcurl` works
-without needing the .proto files on hand), and serves until interrupted.
+wires database -> services -> gRPC servicers, registers them plus gRPC
+reflection (so `grpcurl` works without needing the .proto files on hand),
+and serves until interrupted.
 """
 
 from __future__ import annotations
@@ -17,7 +18,11 @@ from grpc_reflection.v1alpha import reflection
 
 from library.v1 import book_pb2, book_pb2_grpc, loan_pb2, loan_pb2_grpc, member_pb2, member_pb2_grpc
 
+from server.api.book_servicer import BookServicer
+from server.api.loan_servicer import LoanServicer
+from server.api.member_servicer import MemberServicer
 from server.config import settings
+from server.db.database import Database
 from server.db.pool import create_pool
 from server.services.book_service import BookService
 from server.services.loan_service import LoanService
@@ -31,11 +36,18 @@ logger = logging.getLogger("library.server")
 
 async def serve() -> None:
     pool = await create_pool()
+    db = Database(pool)
     server = grpc.aio.server()
 
-    book_pb2_grpc.add_BookServiceServicer_to_server(BookService(pool), server)
-    member_pb2_grpc.add_MemberServiceServicer_to_server(MemberService(pool), server)
-    loan_pb2_grpc.add_LoanServiceServicer_to_server(LoanService(pool), server)
+    book_pb2_grpc.add_BookServiceServicer_to_server(
+        BookServicer(BookService(db)), server
+    )
+    member_pb2_grpc.add_MemberServiceServicer_to_server(
+        MemberServicer(MemberService(db)), server
+    )
+    loan_pb2_grpc.add_LoanServiceServicer_to_server(
+        LoanServicer(LoanService(db)), server
+    )
 
     service_names = (
         book_pb2.DESCRIPTOR.services_by_name["BookService"].full_name,

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from library.v1 import common_pb2, member_pb2
-from server.services.member_service import MemberService
 
-from _helpers import FakeContext
+from _helpers import FakeContext, member_api
 
 
 async def test_update_member_without_status_keeps_current_status(pool):
-    service = MemberService(pool)
+    service = member_api(pool)
     ctx = FakeContext()
     member = await service.CreateMember(
         member_pb2.CreateMemberRequest(

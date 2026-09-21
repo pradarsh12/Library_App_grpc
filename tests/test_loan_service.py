@@ -6,15 +6,12 @@ import grpc
 import pytest
 
 from library.v1 import book_pb2, loan_pb2, member_pb2
-from server.services.book_service import BookService
-from server.services.loan_service import LoanService
-from server.services.member_service import MemberService
 
-from _helpers import AbortedError, FakeContext
+from _helpers import AbortedError, FakeContext, book_api, loan_api, member_api
 
 
 async def _make_member(pool):
-    return await MemberService(pool).CreateMember(
+    return await member_api(pool).CreateMember(
         member_pb2.CreateMemberRequest(
             first_name="Test",
             last_name="Member",
@@ -25,7 +22,7 @@ async def _make_member(pool):
 
 
 async def test_borrow_and_return_flow(pool):
-    books, members, loans = BookService(pool), MemberService(pool), LoanService(pool)
+    books, members, loans = book_api(pool), member_api(pool), loan_api(pool)
     ctx = FakeContext()
 
     book = await books.CreateBook(
@@ -62,7 +59,7 @@ async def test_borrow_and_return_flow(pool):
 
 
 async def test_borrow_same_book_twice_by_same_member_rejected(pool):
-    books, loans = BookService(pool), LoanService(pool)
+    books, loans = book_api(pool), loan_api(pool)
     ctx = FakeContext()
 
     # Two copies available, so this isn't the "no copies left" case —
@@ -95,7 +92,7 @@ async def test_borrow_same_book_twice_by_same_member_rejected(pool):
 
 
 async def test_borrow_nonexistent_book_raises_not_found(pool):
-    loans = LoanService(pool)
+    loans = loan_api(pool)
     member = await _make_member(pool)
     with pytest.raises(AbortedError) as exc_info:
         await loans.BorrowBook(
@@ -106,7 +103,7 @@ async def test_borrow_nonexistent_book_raises_not_found(pool):
 
 
 async def test_list_loans_for_member(pool):
-    books, loans = BookService(pool), LoanService(pool)
+    books, loans = book_api(pool), loan_api(pool)
     ctx = FakeContext()
     book = await books.CreateBook(
         book_pb2.CreateBookRequest(
@@ -129,11 +126,9 @@ async def test_list_loans_for_member(pool):
 async def test_borrow_rejects_excessive_loan_period():
     import grpc
     from library.v1 import loan_pb2
-    from server.services.loan_service import LoanService
-    from _helpers import AbortedError, FakeContext
     import pytest
 
-    service = LoanService(pool=None)
+    service = loan_api(pool=None)
     with pytest.raises(AbortedError) as exc_info:
         await service.BorrowBook(
             loan_pb2.BorrowBookRequest(book_id=1, member_id=1, loan_period_days=100_000),

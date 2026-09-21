@@ -27,7 +27,9 @@ build-backend = "setuptools.build_meta"
 package-dir = {"" = "src"}
 packages = [
     "server",
+    "server.api",
     "server.db",
+    "server.domain",
     "server.repositories",
     "server.services",
     "library",

@@ -109,14 +109,16 @@ src/
   library/v1/                compiled *_pb2.py / *_pb2_grpc.py stubs (committed; regenerate with scripts/generate_proto.py)
   server/
     config.py                 env-driven settings
+    api/                        gRPC layer: servicers (proto <-> service calls), error -> status mapping, page tokens
+    services/                   business logic: validation, defaults, borrow/return rules, transactions (no gRPC/proto)
+    repositories/               SQL only: run queries on a given connection, return domain objects
+    domain/                     plain dataclasses (Book/Member/Loan, loan status rule) and paging types
     db/
-      pool.py                   asyncpg pool creation
-    repositories/               raw-SQL data access (book/member/loan)
-    services/                   BookService / MemberService / LoanService servicers
-    mappers.py                  DB row -> protobuf message
-    errors.py                   domain exceptions -> gRPC status codes
+      pool.py                     asyncpg pool creation
+      database.py                 Database: hands services repositories bound to a connection/transaction
+    mappers.py                  domain object <-> protobuf message
+    errors.py                   domain exceptions
     validation.py                input validation helpers
-    pagination.py                 offset-based pagination helper
     main.py                      server entrypoint (python -m server.main)
 client_examples/
   sample_client.py             scripted walkthrough of every RPC
