@@ -124,3 +124,19 @@ async def test_list_loans_for_member(pool):
     )
     assert len(response.loans) == 1
     assert response.loans[0].book_id == book.id
+
+
+async def test_borrow_rejects_excessive_loan_period():
+    import grpc
+    from library.v1 import loan_pb2
+    from server.services.loan_service import LoanService
+    from _helpers import AbortedError, FakeContext
+    import pytest
+
+    service = LoanService(pool=None)
+    with pytest.raises(AbortedError) as exc_info:
+        await service.BorrowBook(
+            loan_pb2.BorrowBookRequest(book_id=1, member_id=1, loan_period_days=100_000),
+            FakeContext(),
+        )
+    assert exc_info.value.code == grpc.StatusCode.INVALID_ARGUMENT

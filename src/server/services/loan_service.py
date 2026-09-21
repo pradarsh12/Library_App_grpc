@@ -24,7 +24,11 @@ class LoanService(loan_pb2_grpc.LoanServiceServicer):
         loan_period_days = (
             request.loan_period_days or settings.default_loan_period_days
         )
-        validation.require_positive_int(loan_period_days, "loan_period_days")
+        validation.require_positive_int(
+            loan_period_days,
+            "loan_period_days",
+            maximum=validation.MAX_LOAN_PERIOD_DAYS,
+        )
 
         row = await loan_repository.borrow_book(
             self._pool,

@@ -17,6 +17,7 @@ class Settings:
     grpc_port: int
     db_pool_min_size: int
     db_pool_max_size: int
+    db_command_timeout_seconds: float
     default_loan_period_days: int
 
     @classmethod
@@ -30,6 +31,9 @@ class Settings:
             grpc_port=int(os.environ.get("GRPC_PORT", "50051")),
             db_pool_min_size=int(os.environ.get("DB_POOL_MIN_SIZE", "5")),
             db_pool_max_size=int(os.environ.get("DB_POOL_MAX_SIZE", "20")),
+            db_command_timeout_seconds=float(
+                os.environ.get("DB_COMMAND_TIMEOUT_SECONDS", "20")
+            ),
             default_loan_period_days=int(
                 os.environ.get("DEFAULT_LOAN_PERIOD_DAYS", "14")
             ),

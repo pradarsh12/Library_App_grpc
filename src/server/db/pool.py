@@ -18,4 +18,6 @@ async def create_pool() -> asyncpg.Pool:
         dsn=settings.database_url,
         min_size=settings.db_pool_min_size,
         max_size=settings.db_pool_max_size,
+        # Fail a stuck query instead of holding the RPC and connection forever.
+        command_timeout=settings.db_command_timeout_seconds,
     )

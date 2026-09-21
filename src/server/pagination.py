@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from library.v1 import common_pb2
 
+from server.errors import ValidationError
+
 DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
 
@@ -16,7 +18,14 @@ MAX_PAGE_SIZE = 100
 def parse_page(page_request: common_pb2.PageRequest) -> tuple[int, int]:
     size = page_request.page_size or DEFAULT_PAGE_SIZE
     size = max(1, min(size, MAX_PAGE_SIZE))
-    offset = int(page_request.page_token) if page_request.page_token else 0
+    offset = 0
+    if page_request.page_token:
+        try:
+            offset = int(page_request.page_token)
+        except ValueError:
+            raise ValidationError("invalid page_token") from None
+        if offset < 0:
+            raise ValidationError("invalid page_token")
     return size, offset
 
 

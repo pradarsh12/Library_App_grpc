@@ -18,26 +18,46 @@ class MemberService(member_pb2_grpc.MemberServiceServicer):
 
     @handle_errors
     async def CreateMember(self, request: member_pb2.CreateMemberRequest, context):
-        first_name = validation.require_non_empty(request.first_name, "first_name")
-        last_name = validation.require_non_empty(request.last_name, "last_name")
+        first_name = validation.require_non_empty(
+            request.first_name, "first_name", max_length=validation.MAX_NAME_LEN
+        )
+        last_name = validation.require_non_empty(
+            request.last_name, "last_name", max_length=validation.MAX_NAME_LEN
+        )
         email = validation.require_email(request.email)
+        phone = validation.optional_text(
+            request.phone, "phone", max_length=validation.MAX_PHONE_LEN
+        )
+        address = validation.optional_text(
+            request.address, "address", max_length=validation.MAX_ADDRESS_LEN
+        )
 
         row = await member_repository.create_member(
             self._pool,
             first_name=first_name,
             last_name=last_name,
             email=email,
-            phone=request.phone.strip() or None,
-            address=request.address.strip() or None,
+            phone=phone,
+            address=address,
         )
         return mappers.member_to_proto(row)
 
     @handle_errors
     async def UpdateMember(self, request: member_pb2.UpdateMemberRequest, context):
         member_id = validation.require_positive_id(request.id, "id")
-        first_name = validation.require_non_empty(request.first_name, "first_name")
-        last_name = validation.require_non_empty(request.last_name, "last_name")
+        first_name = validation.require_non_empty(
+            request.first_name, "first_name", max_length=validation.MAX_NAME_LEN
+        )
+        last_name = validation.require_non_empty(
+            request.last_name, "last_name", max_length=validation.MAX_NAME_LEN
+        )
         email = validation.require_email(request.email)
+        phone = validation.optional_text(
+            request.phone, "phone", max_length=validation.MAX_PHONE_LEN
+        )
+        address = validation.optional_text(
+            request.address, "address", max_length=validation.MAX_ADDRESS_LEN
+        )
         # An unset `status` field (MEMBER_STATUS_UNSPECIFIED) defaults to
         # "active" -- this API expects the full record on every update
         # rather than supporting partial field masks.
@@ -49,8 +69,8 @@ class MemberService(member_pb2_grpc.MemberServiceServicer):
             first_name=first_name,
             last_name=last_name,
             email=email,
-            phone=request.phone.strip() or None,
-            address=request.address.strip() or None,
+            phone=phone,
+            address=address,
             status=status,
         )
         return mappers.member_to_proto(row)
@@ -66,7 +86,7 @@ class MemberService(member_pb2_grpc.MemberServiceServicer):
         size, offset = parse_page(request.page)
         rows = await member_repository.list_members(
             self._pool,
-            search=request.search.strip(),
+            search=validation.require_search(request.search),
             limit=size + 1,
             offset=offset,
         )

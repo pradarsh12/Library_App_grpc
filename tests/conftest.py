@@ -48,7 +48,13 @@ async def pool():
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def _clean_tables(pool):
+async def _clean_tables(request):
+    # Only touch the database for tests that use it, so pure validation and
+    # error-mapping tests still run when Postgres is unavailable.
+    if "pool" not in request.fixturenames:
+        yield
+        return
+    pool = request.getfixturevalue("pool")
     async with pool.acquire() as conn:
         await conn.execute(
             "TRUNCATE loans, book_copies, books, members RESTART IDENTITY CASCADE"

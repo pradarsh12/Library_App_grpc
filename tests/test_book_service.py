@@ -70,3 +70,40 @@ async def test_duplicate_isbn_rejected(pool):
             book_pb2.CreateBookRequest(isbn="123", title="Book B", author="Y"), ctx
         )
     assert exc_info.value.code == grpc.StatusCode.ALREADY_EXISTS
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"title": "x" * 256, "author": "A"},
+        {"title": "T", "author": "A", "isbn": "9" * 33},
+        {"title": "T", "author": "A", "initial_copies": 1001},
+    ],
+)
+async def test_create_book_rejects_oversized_input(kwargs):
+    service = BookService(pool=None)  # never reaches the DB
+    with pytest.raises(AbortedError) as exc_info:
+        await service.CreateBook(book_pb2.CreateBookRequest(**kwargs), FakeContext())
+    assert exc_info.value.code == grpc.StatusCode.INVALID_ARGUMENT
+
+
+async def test_add_book_copies_rejects_huge_count():
+    service = BookService(pool=None)
+    with pytest.raises(AbortedError) as exc_info:
+        await service.AddBookCopies(
+            book_pb2.AddBookCopiesRequest(book_id=1, count=10_000_000), FakeContext()
+        )
+    assert exc_info.value.code == grpc.StatusCode.INVALID_ARGUMENT
+
+
+@pytest.mark.parametrize("token", ["abc", "-5", "1.5"])
+async def test_list_books_rejects_invalid_page_token(token):
+    from library.v1 import common_pb2
+
+    service = BookService(pool=None)
+    with pytest.raises(AbortedError) as exc_info:
+        await service.ListBooks(
+            book_pb2.ListBooksRequest(page=common_pb2.PageRequest(page_token=token)),
+            FakeContext(),
+        )
+    assert exc_info.value.code == grpc.StatusCode.INVALID_ARGUMENT

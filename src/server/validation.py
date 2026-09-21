@@ -13,11 +13,35 @@ from server.errors import ValidationError
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
+# Upper bounds shared by the services.
+MAX_NAME_LEN = 100
+MAX_TITLE_LEN = 100
+MAX_EMAIL_LEN = 200
+MAX_ISBN_LEN = 32
+MAX_PHONE_LEN = 32
+MAX_GENRE_LEN = 100
+MAX_ADDRESS_LEN = 500
+MAX_SEARCH_LEN = 100
+MAX_COPIES = 1000
+MAX_LOAN_PERIOD_DAYS = 365
 
-def require_non_empty(value: str, field: str) -> str:
+
+def require_non_empty(value: str, field: str, *, max_length: int | None = None) -> str:
     value = (value or "").strip()
     if not value:
         raise ValidationError(f"{field} is required")
+    if max_length is not None and len(value) > max_length:
+        raise ValidationError(f"{field} must be at most {max_length} characters")
+    return value
+
+
+def optional_text(value: str, field: str, *, max_length: int) -> str | None:
+    """Strip `value`; return None when blank, else enforce `max_length`."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    if len(value) > max_length:
+        raise ValidationError(f"{field} must be at most {max_length} characters")
     return value
 
 
@@ -28,16 +52,24 @@ def require_positive_id(value: int, field: str) -> int:
 
 
 def require_email(value: str, field: str = "email") -> str:
-    value = require_non_empty(value, field)
+    value = require_non_empty(value, field, max_length=MAX_EMAIL_LEN)
     if not _EMAIL_RE.match(value):
         raise ValidationError(f"{field} is not a valid email address")
     return value
 
 
-def require_positive_int(value: int, field: str, *, allow_zero: bool = False) -> int:
+def require_positive_int(
+    value: int,
+    field: str,
+    *,
+    allow_zero: bool = False,
+    maximum: int | None = None,
+) -> int:
     minimum = 0 if allow_zero else 1
     if value is None or value < minimum:
         raise ValidationError(f"{field} must be >= {minimum}")
+    if maximum is not None and value > maximum:
+        raise ValidationError(f"{field} must be <= {maximum}")
     return value
 
 
@@ -46,4 +78,11 @@ def require_year(value: int, field: str = "published_year") -> int | None:
         return None
     if value < 1400 or value > 2100:
         raise ValidationError(f"{field} must be a plausible year")
+    return value
+
+
+def require_search(value: str) -> str:
+    value = (value or "").strip()
+    if len(value) > MAX_SEARCH_LEN:
+        raise ValidationError(f"search must be at most {MAX_SEARCH_LEN} characters")
     return value
