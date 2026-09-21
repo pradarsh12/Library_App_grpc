@@ -6,8 +6,11 @@ via the query below rather than stored on `books`, so they can never drift.
 
 from __future__ import annotations
 
+import re
+
 import asyncpg
 
+from server.repositories._search import like_pattern
 from server.errors import AlreadyExistsError, NotFoundError, ValidationError
 
 _BOOK_SELECT = """
@@ -112,17 +115,23 @@ async def get_book(pool: asyncpg.Pool, book_id: int) -> asyncpg.Record:
 async def list_books(
     pool: asyncpg.Pool, *, search: str, limit: int, offset: int
 ) -> list[asyncpg.Record]:
-    pattern = f"%{search}%" if search else None
+    pattern = like_pattern(search)
+    # ISBNs are stored normalized, so match them against the normalized term.
+    isbn_pattern = like_pattern(re.sub(r"[\s-]", "", search).upper())
     async with pool.acquire() as conn:
         return await conn.fetch(
             f"""{_BOOK_SELECT}
-                WHERE ($1::text IS NULL OR b.title ILIKE $1 OR b.author ILIKE $1)
+                WHERE ($1::text IS NULL
+                       OR b.title ILIKE $1
+                       OR b.author ILIKE $1
+                       OR b.isbn ILIKE $4)
                 GROUP BY b.id
                 ORDER BY b.title, b.id
                 LIMIT $2 OFFSET $3""",
             pattern,
             limit,
             offset,
+            isbn_pattern,
         )
 
 

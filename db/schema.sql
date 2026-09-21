@@ -17,6 +17,10 @@ CREATE TABLE IF NOT EXISTS members (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Case-insensitive uniqueness backstop: the service lowercases emails, but this
+-- also rejects mixed-case rows written by any other path.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_members_email_lower ON members (lower(email));
+
 CREATE TABLE IF NOT EXISTS books (
   id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   isbn           TEXT UNIQUE,

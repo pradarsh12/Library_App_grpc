@@ -55,7 +55,9 @@ def require_email(value: str, field: str = "email") -> str:
     value = require_non_empty(value, field, max_length=MAX_EMAIL_LEN)
     if not _EMAIL_RE.match(value):
         raise ValidationError(f"{field} is not a valid email address")
-    return value
+    # Emails are case-insensitive in practice; store one canonical form so the
+    # UNIQUE constraint can't be sidestepped by changing case.
+    return value.lower()
 
 
 def require_positive_int(
@@ -81,8 +83,13 @@ def require_year(value: int, field: str = "published_year") -> int | None:
     return value
 
 
+def normalize_isbn(value: str) -> str:
+    """Canonical ISBN form: no hyphens/spaces, uppercase check digit."""
+    return re.sub(r"[\s-]", "", value or "").upper()
+
+
 def require_search(value: str) -> str:
-    value = (value or "").strip()
+    value = " ".join((value or "").split())
     if len(value) > MAX_SEARCH_LEN:
         raise ValidationError(f"search must be at most {MAX_SEARCH_LEN} characters")
     return value

@@ -12,9 +12,14 @@ from server.pagination import build_page_response, parse_page
 from server.repositories import book_repository
 
 
+def _normalized_isbn(raw: str) -> str | None:
+    isbn = validation.optional_text(raw, "isbn", max_length=validation.MAX_ISBN_LEN)
+    return validation.normalize_isbn(isbn) if isbn else None
+
+
 def _optional_fields(request) -> tuple[str | None, str | None, str | None]:
     return (
-        validation.optional_text(request.isbn, "isbn", max_length=validation.MAX_ISBN_LEN),
+        _normalized_isbn(request.isbn),
         validation.optional_text(
             request.publisher, "publisher", max_length=validation.MAX_TITLE_LEN
         ),

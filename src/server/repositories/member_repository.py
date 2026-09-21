@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncpg
 
+from server.repositories._search import like_pattern
 from server.errors import AlreadyExistsError, NotFoundError
 
 _MEMBER_COLUMNS = (
@@ -89,13 +90,14 @@ async def get_member(pool: asyncpg.Pool, member_id: int) -> asyncpg.Record:
 async def list_members(
     pool: asyncpg.Pool, *, search: str, limit: int, offset: int
 ) -> list[asyncpg.Record]:
-    pattern = f"%{search}%" if search else None
+    pattern = like_pattern(search)
     async with pool.acquire() as conn:
         return await conn.fetch(
             f"""SELECT {_MEMBER_COLUMNS} FROM members
                 WHERE ($1::text IS NULL
                        OR first_name ILIKE $1
                        OR last_name ILIKE $1
+                       OR (first_name || ' ' || last_name) ILIKE $1
                        OR email ILIKE $1)
                 ORDER BY last_name, first_name, id
                 LIMIT $2 OFFSET $3""",
