@@ -1,9 +1,6 @@
-import { status as GrpcStatus } from "@grpc/grpc-js";
-import { notFound } from "next/navigation";
-import { FetchErrorState, PageHeader } from "@/components/ui";
-import { GrpcCallError } from "@/lib/grpc/client";
+import { PageHeader } from "@/components/ui";
 import { getMember } from "@/lib/grpc/members";
-import { describeGrpcError } from "@/lib/grpc/errors";
+import { loadPageData } from "@/lib/load-page-data";
 import { MemberForm } from "../member-form";
 import { updateMemberAction } from "../actions";
 
@@ -12,21 +9,13 @@ export default async function EditMemberPage({
 }: PageProps<"/members/[id]">) {
   const { id } = await params;
 
-  let member;
-  try {
-    member = await getMember(id);
-  } catch (error) {
-    if (error instanceof GrpcCallError && error.code === GrpcStatus.NOT_FOUND) {
-      notFound();
-    }
-    console.error("getMember failed:", error);
-    return (
-      <div>
-        <PageHeader title="Member" />
-        <FetchErrorState message={describeGrpcError(error)} />
-      </div>
-    );
-  }
+  const result = await loadPageData(() => getMember(id), {
+    title: "Member",
+    logLabel: "getMember",
+    notFoundOnMissing: true,
+  });
+  if ("errorNode" in result) return result.errorNode;
+  const member = result.data;
 
   return (
     <div>
