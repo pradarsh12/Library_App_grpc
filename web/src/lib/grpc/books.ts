@@ -12,8 +12,19 @@ import type {
   UpdateBookRequest,
 } from "./types";
 
-export function listBooks(search = ""): Promise<ListBooksResponse> {
-  const req: ListBooksRequest = { search, page: { pageSize: 100 } };
+export const LIST_BOOKS_PAGE_SIZE = 20;
+
+export function listBooks(
+  search = "",
+  options: { pageToken?: string; pageSize?: number } = {}
+): Promise<ListBooksResponse> {
+  const req: ListBooksRequest = {
+    search,
+    page: {
+      pageSize: options.pageSize ?? LIST_BOOKS_PAGE_SIZE,
+      pageToken: options.pageToken ?? "",
+    },
+  };
   return call(bookClient, BookMethod.ListBooks, req);
 }
 

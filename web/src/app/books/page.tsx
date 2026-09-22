@@ -1,31 +1,55 @@
 import Link from "next/link";
-import { Badge, EmptyState, FetchErrorState, Input, LinkButton, PageHeader } from "@/components/ui";
+import { Badge, Input, LinkButton, PageHeader } from "@/components/ui";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
+import { Pagination, parsePagination } from "@/components/pagination";
 import { listBooks } from "@/lib/grpc/books";
-import { describeGrpcError } from "@/lib/grpc/errors";
-import type { ListBooksResponse } from "@/lib/grpc/types";
+import { loadPageData } from "@/lib/load-page-data";
+import type { Book } from "@/lib/grpc/types";
+
+const columns: DataTableColumn<Book>[] = [
+  {
+    header: "Title",
+    cell: (book) => (
+      <Link href={`/books/${book.id}`} className="font-medium text-slate-900 hover:underline">
+        {book.title}
+      </Link>
+    ),
+  },
+  {
+    header: "Author",
+    cell: (book) => <span className="text-slate-600">{book.author}</span>,
+  },
+  {
+    header: "Genre",
+    cell: (book) => <span className="text-slate-600">{book.genre || "—"}</span>,
+  },
+  {
+    header: "Year",
+    cell: (book) => <span className="text-slate-600">{book.publishedYear || "—"}</span>,
+  },
+  {
+    header: "Copies",
+    cell: (book) => (
+      <Badge color={book.availableCopies > 0 ? "green" : "gray"}>
+        {book.availableCopies}/{book.totalCopies} available
+      </Badge>
+    ),
+  },
+];
 
 export default async function BooksPage({
   searchParams,
 }: PageProps<"/books">) {
-  const { search } = await searchParams;
-  const query = typeof search === "string" ? search : "";
+  const params = await searchParams;
+  const query = typeof params.search === "string" ? params.search : "";
+  const { pageToken, prevTokens } = parsePagination(params);
 
-  let result: ListBooksResponse;
-  try {
-    result = await listBooks(query);
-  } catch (error) {
-    // Expected failure (e.g. backend not running) — render inline instead
-    // of letting it crash as an uncaught exception. See error.tsx for the
-    // fallback that still exists for genuinely unexpected errors.
-    console.error("listBooks failed:", error);
-    return (
-      <div>
-        <PageHeader title="Books" />
-        <FetchErrorState message={describeGrpcError(error)} />
-      </div>
-    );
-  }
-  const { books } = result;
+  const result = await loadPageData(() => listBooks(query, { pageToken }), {
+    title: "Books",
+    logLabel: "listBooks",
+  });
+  if ("errorNode" in result) return result.errorNode;
+  const { books, page } = result.data;
 
   return (
     <div>
@@ -44,42 +68,19 @@ export default async function BooksPage({
         />
       </form>
 
-      {books.length === 0 ? (
-        <EmptyState>No books found.</EmptyState>
-      ) : (
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-medium uppercase text-slate-500">
-              <tr>
-                <th className="px-4 py-2">Title</th>
-                <th className="px-4 py-2">Author</th>
-                <th className="px-4 py-2">Genre</th>
-                <th className="px-4 py-2">Year</th>
-                <th className="px-4 py-2">Copies</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {books.map((book) => (
-                <tr key={book.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-2 font-medium text-slate-900">
-                    <Link href={`/books/${book.id}`} className="hover:underline">
-                      {book.title}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2 text-slate-600">{book.author}</td>
-                  <td className="px-4 py-2 text-slate-600">{book.genre || "—"}</td>
-                  <td className="px-4 py-2 text-slate-600">{book.publishedYear || "—"}</td>
-                  <td className="px-4 py-2">
-                    <Badge color={book.availableCopies > 0 ? "green" : "gray"}>
-                      {book.availableCopies}/{book.totalCopies} available
-                    </Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        columns={columns}
+        rows={books}
+        rowKey={(book) => book.id}
+        emptyMessage="No books found."
+      />
+      <Pagination
+        basePath="/books"
+        params={{ search: query }}
+        pageToken={pageToken}
+        prevTokens={prevTokens}
+        nextPageToken={page.nextPageToken}
+      />
     </div>
   );
 }

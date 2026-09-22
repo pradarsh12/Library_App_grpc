@@ -1,29 +1,52 @@
 import Link from "next/link";
-import { Badge, EmptyState, FetchErrorState, Input, LinkButton, PageHeader } from "@/components/ui";
+import { Badge, Input, LinkButton, PageHeader } from "@/components/ui";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
+import { Pagination, parsePagination } from "@/components/pagination";
 import { listMembers } from "@/lib/grpc/members";
-import { describeGrpcError } from "@/lib/grpc/errors";
+import { loadPageData } from "@/lib/load-page-data";
 import { memberStatusLabel } from "@/lib/grpc/status-labels";
-import type { ListMembersResponse } from "@/lib/grpc/types";
+import type { Member } from "@/lib/grpc/types";
+
+const columns: DataTableColumn<Member>[] = [
+  {
+    header: "Name",
+    cell: (member) => (
+      <Link href={`/members/${member.id}`} className="font-medium text-slate-900 hover:underline">
+        {member.firstName} {member.lastName}
+      </Link>
+    ),
+  },
+  {
+    header: "Email",
+    cell: (member) => <span className="text-slate-600">{member.email}</span>,
+  },
+  {
+    header: "Phone",
+    cell: (member) => <span className="text-slate-600">{member.phone || "—"}</span>,
+  },
+  {
+    header: "Status",
+    cell: (member) => (
+      <Badge color={memberStatusLabel[member.status].color}>
+        {memberStatusLabel[member.status].label}
+      </Badge>
+    ),
+  },
+];
 
 export default async function MembersPage({
   searchParams,
 }: PageProps<"/members">) {
-  const { search } = await searchParams;
-  const query = typeof search === "string" ? search : "";
+  const params = await searchParams;
+  const query = typeof params.search === "string" ? params.search : "";
+  const { pageToken, prevTokens } = parsePagination(params);
 
-  let result: ListMembersResponse;
-  try {
-    result = await listMembers(query);
-  } catch (error) {
-    console.error("listMembers failed:", error);
-    return (
-      <div>
-        <PageHeader title="Members" />
-        <FetchErrorState message={describeGrpcError(error)} />
-      </div>
-    );
-  }
-  const { members } = result;
+  const result = await loadPageData(() => listMembers(query, { pageToken }), {
+    title: "Members",
+    logLabel: "listMembers",
+  });
+  if ("errorNode" in result) return result.errorNode;
+  const { members, page } = result.data;
 
   return (
     <div>
@@ -42,40 +65,19 @@ export default async function MembersPage({
         />
       </form>
 
-      {members.length === 0 ? (
-        <EmptyState>No members found.</EmptyState>
-      ) : (
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-medium uppercase text-slate-500">
-              <tr>
-                <th className="px-4 py-2">Name</th>
-                <th className="px-4 py-2">Email</th>
-                <th className="px-4 py-2">Phone</th>
-                <th className="px-4 py-2">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {members.map((member) => (
-                <tr key={member.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-2 font-medium text-slate-900">
-                    <Link href={`/members/${member.id}`} className="hover:underline">
-                      {member.firstName} {member.lastName}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2 text-slate-600">{member.email}</td>
-                  <td className="px-4 py-2 text-slate-600">{member.phone || "—"}</td>
-                  <td className="px-4 py-2">
-                    <Badge color={memberStatusLabel[member.status].color}>
-                      {memberStatusLabel[member.status].label}
-                    </Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        columns={columns}
+        rows={members}
+        rowKey={(member) => member.id}
+        emptyMessage="No members found."
+      />
+      <Pagination
+        basePath="/members"
+        params={{ search: query }}
+        pageToken={pageToken}
+        prevTokens={prevTokens}
+        nextPageToken={page.nextPageToken}
+      />
     </div>
   );
 }
