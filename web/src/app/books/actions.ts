@@ -3,10 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { addBookCopies, createBook, updateBook } from "@/lib/grpc/books";
-import { describeGrpcError } from "@/lib/grpc/errors";
 import { formValue, optionalFormValue } from "@/lib/form-data";
+import { runMutation, runMutationAndReturn, type FormState } from "@/lib/run-mutation";
 
-export type FormState = { error?: string };
+export type { FormState };
 
 function parseYear(value: string): number | undefined {
   if (!value) return undefined;
@@ -18,11 +18,8 @@ export async function createBookAction(
   _prevState: FormState,
   formData: FormData
 ): Promise<FormState> {
-  // `redirect()` throws internally to signal Next.js, so the call must sit
-  // outside this try/catch — otherwise the catch below would swallow it.
-  let bookId: string;
-  try {
-    const book = await createBook({
+  const result = await runMutationAndReturn(() =>
+    createBook({
       isbn: optionalFormValue(formData, "isbn"),
       title: formValue(formData, "title"),
       author: formValue(formData, "author"),
@@ -30,13 +27,11 @@ export async function createBookAction(
       publishedYear: parseYear(formValue(formData, "publishedYear")),
       genre: optionalFormValue(formData, "genre"),
       initialCopies: Number(formValue(formData, "initialCopies") || 1),
-    });
-    bookId = book.id;
-  } catch (error) {
-    return { error: describeGrpcError(error) };
-  }
+    })
+  );
+  if ("error" in result) return result;
   revalidatePath("/books");
-  redirect(`/books/${bookId}`);
+  redirect(`/books/${result.data.id}`);
 }
 
 export async function updateBookAction(
@@ -44,22 +39,20 @@ export async function updateBookAction(
   _prevState: FormState,
   formData: FormData
 ): Promise<FormState> {
-  try {
-    await updateBook({
-      id,
-      isbn: optionalFormValue(formData, "isbn"),
-      title: formValue(formData, "title"),
-      author: formValue(formData, "author"),
-      publisher: optionalFormValue(formData, "publisher"),
-      publishedYear: parseYear(formValue(formData, "publishedYear")),
-      genre: optionalFormValue(formData, "genre"),
-    });
-    revalidatePath("/books");
-    revalidatePath(`/books/${id}`);
-  } catch (error) {
-    return { error: describeGrpcError(error) };
-  }
-  return {};
+  return runMutation(
+    () =>
+      updateBook({
+        id,
+        isbn: optionalFormValue(formData, "isbn"),
+        title: formValue(formData, "title"),
+        author: formValue(formData, "author"),
+        publisher: optionalFormValue(formData, "publisher"),
+        publishedYear: parseYear(formValue(formData, "publishedYear")),
+        genre: optionalFormValue(formData, "genre"),
+      }),
+    "/books",
+    `/books/${id}`
+  );
 }
 
 export async function addBookCopiesAction(
@@ -67,13 +60,10 @@ export async function addBookCopiesAction(
   _prevState: FormState,
   formData: FormData
 ): Promise<FormState> {
-  try {
-    const count = Number(formValue(formData, "count") || 0);
-    await addBookCopies({ bookId: id, count });
-    revalidatePath("/books");
-    revalidatePath(`/books/${id}`);
-  } catch (error) {
-    return { error: describeGrpcError(error) };
-  }
-  return {};
+  const count = Number(formValue(formData, "count") || 0);
+  return runMutation(
+    () => addBookCopies({ bookId: id, count }),
+    "/books",
+    `/books/${id}`
+  );
 }

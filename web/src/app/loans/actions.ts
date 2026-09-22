@@ -1,29 +1,26 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { borrowBook, returnBook } from "@/lib/grpc/loans";
-import { describeGrpcError } from "@/lib/grpc/errors";
 import { formValue } from "@/lib/form-data";
+import { runMutation, type FormState } from "@/lib/run-mutation";
 
-export type FormState = { error?: string };
+export type { FormState };
 
 export async function borrowBookAction(
   _prevState: FormState,
   formData: FormData
 ): Promise<FormState> {
-  try {
-    const loanPeriodDays = Number(formValue(formData, "loanPeriodDays") || 0);
-    await borrowBook({
-      bookId: formValue(formData, "bookId"),
-      memberId: formValue(formData, "memberId"),
-      loanPeriodDays: loanPeriodDays > 0 ? loanPeriodDays : undefined,
-    });
-    revalidatePath("/loans");
-    revalidatePath("/books");
-  } catch (error) {
-    return { error: describeGrpcError(error) };
-  }
-  return {};
+  const loanPeriodDays = Number(formValue(formData, "loanPeriodDays") || 0);
+  return runMutation(
+    () =>
+      borrowBook({
+        bookId: formValue(formData, "bookId"),
+        memberId: formValue(formData, "memberId"),
+        loanPeriodDays: loanPeriodDays > 0 ? loanPeriodDays : undefined,
+      }),
+    "/loans",
+    "/books"
+  );
 }
 
 export async function returnBookAction(
@@ -31,12 +28,5 @@ export async function returnBookAction(
   _prevState: FormState,
   _formData: FormData
 ): Promise<FormState> {
-  try {
-    await returnBook({ loanId });
-    revalidatePath("/loans");
-    revalidatePath("/books");
-  } catch (error) {
-    return { error: describeGrpcError(error) };
-  }
-  return {};
+  return runMutation(() => returnBook({ loanId }), "/loans", "/books");
 }
