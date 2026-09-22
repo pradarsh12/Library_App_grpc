@@ -1,30 +1,25 @@
 "use client";
 
-import { useActionState, useState, type FormEvent } from "react";
-import { Button, ErrorBanner, Input, PendingOverlay } from "@/components/ui";
-import { useDismissingError } from "@/lib/use-dismissing-error";
+import { Button, ErrorBanner, Input, PendingOverlay, fieldErrorProps } from "@/components/ui";
+import { useValidatedForm } from "@/lib/use-validated-form";
 import { LIMITS, positiveIntError } from "@/lib/form-validation";
 import type { FormState } from "./actions";
+
+type FieldErrors = Partial<Record<"count", string>>;
 
 export function AddCopiesForm({
   action,
 }: {
   action: (prevState: FormState, formData: FormData) => Promise<FormState>;
 }) {
-  const [state, formAction, pending] = useActionState<FormState, FormData>(action, {});
-  const errorMessage = useDismissingError(state);
-  const [countError, setCountError] = useState<string | undefined>();
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    const formData = new FormData(event.currentTarget);
-    const error = positiveIntError(String(formData.get("count") ?? ""), "Count", {
-      max: LIMITS.copies,
-    });
-    setCountError(error);
-    if (error) {
-      event.preventDefault();
-    }
-  }
+  const { formAction, pending, errorMessage, errors, handleSubmit } = useValidatedForm<FieldErrors>(
+    action,
+    (formData) => ({
+      count: positiveIntError(String(formData.get("count") ?? ""), "Count", {
+        max: LIMITS.copies,
+      }),
+    })
+  );
 
   return (
     <form action={formAction} onSubmit={handleSubmit} noValidate className="flex items-end gap-2">
@@ -40,12 +35,11 @@ export function AddCopiesForm({
           min={1}
           max={LIMITS.copies}
           defaultValue={1}
-          aria-invalid={countError ? true : undefined}
-          aria-describedby={countError ? "count-error" : undefined}
+          {...fieldErrorProps("count", errors.count)}
         />
-        {countError && (
+        {errors.count && (
           <p id="count-error" className="mt-1 text-sm text-red-600">
-            {countError}
+            {errors.count}
           </p>
         )}
       </div>

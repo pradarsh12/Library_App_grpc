@@ -1,6 +1,5 @@
 "use client";
 
-import { useActionState, useState, type FormEvent } from "react";
 import {
   Button,
   ErrorBanner,
@@ -11,7 +10,7 @@ import {
   Select,
 } from "@/components/ui";
 import { memberStatusLabel } from "@/lib/grpc/status-labels";
-import { useDismissingError } from "@/lib/use-dismissing-error";
+import { useValidatedForm } from "@/lib/use-validated-form";
 import { LIMITS, emailError, optionalLengthError, requiredError } from "@/lib/form-validation";
 import type { Member } from "@/lib/grpc/types";
 import type { FormState } from "./actions";
@@ -35,25 +34,16 @@ export function MemberForm({
   initial?: Member;
   submitLabel: string;
 }) {
-  const [state, formAction, pending] = useActionState<FormState, FormData>(action, {});
-  const errorMessage = useDismissingError(state);
-  const [errors, setErrors] = useState<FieldErrors>({});
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    const formData = new FormData(event.currentTarget);
-    const nextErrors: FieldErrors = {
+  const { formAction, pending, errorMessage, errors, handleSubmit } = useValidatedForm<FieldErrors>(
+    action,
+    (formData) => ({
       firstName: requiredError(String(formData.get("firstName") ?? ""), "First name", LIMITS.name),
       lastName: requiredError(String(formData.get("lastName") ?? ""), "Last name", LIMITS.name),
       email: emailError(String(formData.get("email") ?? "")),
       phone: optionalLengthError(String(formData.get("phone") ?? ""), "Phone", LIMITS.phone),
       address: optionalLengthError(String(formData.get("address") ?? ""), "Address", LIMITS.address),
-    };
-
-    setErrors(nextErrors);
-    if (Object.values(nextErrors).some(Boolean)) {
-      event.preventDefault();
-    }
-  }
+    })
+  );
 
   return (
     <form action={formAction} onSubmit={handleSubmit} noValidate className="space-y-4">

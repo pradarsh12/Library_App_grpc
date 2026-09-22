@@ -1,6 +1,5 @@
 "use client";
 
-import { useActionState, useState, type FormEvent } from "react";
 import {
   Button,
   ErrorBanner,
@@ -10,7 +9,7 @@ import {
   PendingOverlay,
   Select,
 } from "@/components/ui";
-import { useDismissingError } from "@/lib/use-dismissing-error";
+import { useValidatedForm } from "@/lib/use-validated-form";
 import { LIMITS, positiveIntError, requiredSelectionError } from "@/lib/form-validation";
 import type { FormState } from "./actions";
 
@@ -25,13 +24,9 @@ export function BorrowForm({
   bookOptions: { id: string; label: string }[];
   memberOptions: { id: string; label: string }[];
 }) {
-  const [state, formAction, pending] = useActionState<FormState, FormData>(action, {});
-  const errorMessage = useDismissingError(state);
-  const [errors, setErrors] = useState<FieldErrors>({});
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    const formData = new FormData(event.currentTarget);
-    const nextErrors: FieldErrors = {
+  const { formAction, pending, errorMessage, errors, handleSubmit } = useValidatedForm<FieldErrors>(
+    action,
+    (formData) => ({
       bookId: requiredSelectionError(String(formData.get("bookId") ?? ""), "Book"),
       memberId: requiredSelectionError(String(formData.get("memberId") ?? ""), "Member"),
       loanPeriodDays: positiveIntError(
@@ -39,13 +34,8 @@ export function BorrowForm({
         "Loan period",
         { max: LIMITS.loanPeriodDays, allowBlank: true }
       ),
-    };
-
-    setErrors(nextErrors);
-    if (Object.values(nextErrors).some(Boolean)) {
-      event.preventDefault();
-    }
-  }
+    })
+  );
 
   return (
     <form

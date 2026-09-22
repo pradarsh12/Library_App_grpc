@@ -1,6 +1,5 @@
 "use client";
 
-import { useActionState, useState, type FormEvent } from "react";
 import {
   Button,
   ErrorBanner,
@@ -9,7 +8,7 @@ import {
   Input,
   PendingOverlay,
 } from "@/components/ui";
-import { useDismissingError } from "@/lib/use-dismissing-error";
+import { useValidatedForm } from "@/lib/use-validated-form";
 import { LIMITS, optionalLengthError, positiveIntError, requiredError, yearError } from "@/lib/form-validation";
 import type { Book } from "@/lib/grpc/types";
 import type { FormState } from "./actions";
@@ -27,13 +26,9 @@ export function BookForm({
   initial?: Book;
   submitLabel: string;
 }) {
-  const [state, formAction, pending] = useActionState<FormState, FormData>(action, {});
-  const errorMessage = useDismissingError(state);
-  const [errors, setErrors] = useState<FieldErrors>({});
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    const formData = new FormData(event.currentTarget);
-    const nextErrors: FieldErrors = {
+  const { formAction, pending, errorMessage, errors, handleSubmit } = useValidatedForm<FieldErrors>(
+    action,
+    (formData) => ({
       title: requiredError(String(formData.get("title") ?? ""), "Title", LIMITS.title),
       author: requiredError(String(formData.get("author") ?? ""), "Author", LIMITS.title),
       isbn: optionalLengthError(String(formData.get("isbn") ?? ""), "ISBN", LIMITS.isbn),
@@ -50,13 +45,8 @@ export function BookForm({
             max: LIMITS.copies,
             allowBlank: true,
           }),
-    };
-
-    setErrors(nextErrors);
-    if (Object.values(nextErrors).some(Boolean)) {
-      event.preventDefault();
-    }
-  }
+    })
+  );
 
   return (
     <form action={formAction} onSubmit={handleSubmit} noValidate className="space-y-4">
