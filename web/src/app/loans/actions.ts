@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { borrowBook, returnBook } from "@/lib/grpc/loans";
 import { describeGrpcError } from "@/lib/grpc/errors";
+import { formValue } from "@/lib/form-data";
 
 export type FormState = { error?: string };
 
@@ -11,10 +12,10 @@ export async function borrowBookAction(
   formData: FormData
 ): Promise<FormState> {
   try {
-    const loanPeriodDays = Number(formData.get("loanPeriodDays") || 0);
+    const loanPeriodDays = Number(formValue(formData, "loanPeriodDays") || 0);
     await borrowBook({
-      bookId: formData.get("bookId") as string,
-      memberId: formData.get("memberId") as string,
+      bookId: formValue(formData, "bookId"),
+      memberId: formValue(formData, "memberId"),
       loanPeriodDays: loanPeriodDays > 0 ? loanPeriodDays : undefined,
     });
     revalidatePath("/loans");

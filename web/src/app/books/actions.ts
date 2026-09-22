@@ -4,10 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { addBookCopies, createBook, updateBook } from "@/lib/grpc/books";
 import { describeGrpcError } from "@/lib/grpc/errors";
+import { formValue, optionalFormValue } from "@/lib/form-data";
 
 export type FormState = { error?: string };
 
-function parseYear(value: FormDataEntryValue | null): number | undefined {
+function parseYear(value: string): number | undefined {
   if (!value) return undefined;
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : undefined;
@@ -22,13 +23,13 @@ export async function createBookAction(
   let bookId: string;
   try {
     const book = await createBook({
-      isbn: (formData.get("isbn") as string) || undefined,
-      title: formData.get("title") as string,
-      author: formData.get("author") as string,
-      publisher: (formData.get("publisher") as string) || undefined,
-      publishedYear: parseYear(formData.get("publishedYear")),
-      genre: (formData.get("genre") as string) || undefined,
-      initialCopies: Number(formData.get("initialCopies") || 1),
+      isbn: optionalFormValue(formData, "isbn"),
+      title: formValue(formData, "title"),
+      author: formValue(formData, "author"),
+      publisher: optionalFormValue(formData, "publisher"),
+      publishedYear: parseYear(formValue(formData, "publishedYear")),
+      genre: optionalFormValue(formData, "genre"),
+      initialCopies: Number(formValue(formData, "initialCopies") || 1),
     });
     bookId = book.id;
   } catch (error) {
@@ -46,12 +47,12 @@ export async function updateBookAction(
   try {
     await updateBook({
       id,
-      isbn: (formData.get("isbn") as string) || undefined,
-      title: formData.get("title") as string,
-      author: formData.get("author") as string,
-      publisher: (formData.get("publisher") as string) || undefined,
-      publishedYear: parseYear(formData.get("publishedYear")),
-      genre: (formData.get("genre") as string) || undefined,
+      isbn: optionalFormValue(formData, "isbn"),
+      title: formValue(formData, "title"),
+      author: formValue(formData, "author"),
+      publisher: optionalFormValue(formData, "publisher"),
+      publishedYear: parseYear(formValue(formData, "publishedYear")),
+      genre: optionalFormValue(formData, "genre"),
     });
     revalidatePath("/books");
     revalidatePath(`/books/${id}`);
@@ -67,7 +68,7 @@ export async function addBookCopiesAction(
   formData: FormData
 ): Promise<FormState> {
   try {
-    const count = Number(formData.get("count") || 0);
+    const count = Number(formValue(formData, "count") || 0);
     await addBookCopies({ bookId: id, count });
     revalidatePath("/books");
     revalidatePath(`/books/${id}`);

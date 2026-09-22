@@ -1,9 +1,18 @@
 "use client";
 
-import { useActionState } from "react";
-import { Button, ErrorBanner, Field, Input, PendingOverlay, Select } from "@/components/ui";
+import { useActionState, useState, type FormEvent } from "react";
+import {
+  Button,
+  ErrorBanner,
+  Field,
+  fieldErrorProps,
+  Input,
+  PendingOverlay,
+  Select,
+} from "@/components/ui";
 import { memberStatusLabel } from "@/lib/grpc/status-labels";
 import { useDismissingError } from "@/lib/use-dismissing-error";
+import { LIMITS, emailError, optionalLengthError, requiredError } from "@/lib/form-validation";
 import type { Member } from "@/lib/grpc/types";
 import type { FormState } from "./actions";
 
@@ -12,6 +21,10 @@ const editableStatuses = [
   "MEMBER_STATUS_INACTIVE",
   "MEMBER_STATUS_SUSPENDED",
 ] as const;
+
+type FieldErrors = Partial<
+  Record<"firstName" | "lastName" | "email" | "phone" | "address", string>
+>;
 
 export function MemberForm({
   action,
@@ -24,32 +37,72 @@ export function MemberForm({
 }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, {});
   const errorMessage = useDismissingError(state);
+  const [errors, setErrors] = useState<FieldErrors>({});
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    const formData = new FormData(event.currentTarget);
+    const nextErrors: FieldErrors = {
+      firstName: requiredError(String(formData.get("firstName") ?? ""), "First name", LIMITS.name),
+      lastName: requiredError(String(formData.get("lastName") ?? ""), "Last name", LIMITS.name),
+      email: emailError(String(formData.get("email") ?? "")),
+      phone: optionalLengthError(String(formData.get("phone") ?? ""), "Phone", LIMITS.phone),
+      address: optionalLengthError(String(formData.get("address") ?? ""), "Address", LIMITS.address),
+    };
+
+    setErrors(nextErrors);
+    if (Object.values(nextErrors).some(Boolean)) {
+      event.preventDefault();
+    }
+  }
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={formAction} onSubmit={handleSubmit} noValidate className="space-y-4">
       <PendingOverlay show={pending} label="Saving member…" />
       <ErrorBanner message={errorMessage} />
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="First name" htmlFor="firstName" required>
-          <Input id="firstName" name="firstName" defaultValue={initial?.firstName} required />
+        <Field label="First name" htmlFor="firstName" required error={errors.firstName}>
+          <Input
+            id="firstName"
+            name="firstName"
+            defaultValue={initial?.firstName}
+            required
+            {...fieldErrorProps("firstName", errors.firstName)}
+          />
         </Field>
-        <Field label="Last name" htmlFor="lastName" required>
-          <Input id="lastName" name="lastName" defaultValue={initial?.lastName} required />
+        <Field label="Last name" htmlFor="lastName" required error={errors.lastName}>
+          <Input
+            id="lastName"
+            name="lastName"
+            defaultValue={initial?.lastName}
+            required
+            {...fieldErrorProps("lastName", errors.lastName)}
+          />
         </Field>
-        <Field label="Email" htmlFor="email" required>
+        <Field label="Email" htmlFor="email" required error={errors.email}>
           <Input
             id="email"
             name="email"
             type="email"
             defaultValue={initial?.email}
             required
+            {...fieldErrorProps("email", errors.email)}
           />
         </Field>
-        <Field label="Phone" htmlFor="phone">
-          <Input id="phone" name="phone" defaultValue={initial?.phone} />
+        <Field label="Phone" htmlFor="phone" error={errors.phone}>
+          <Input
+            id="phone"
+            name="phone"
+            defaultValue={initial?.phone}
+            {...fieldErrorProps("phone", errors.phone)}
+          />
         </Field>
-        <Field label="Address" htmlFor="address">
-          <Input id="address" name="address" defaultValue={initial?.address} />
+        <Field label="Address" htmlFor="address" error={errors.address}>
+          <Input
+            id="address"
+            name="address"
+            defaultValue={initial?.address}
+            {...fieldErrorProps("address", errors.address)}
+          />
         </Field>
         {initial && (
           <Field label="Status" htmlFor="status">

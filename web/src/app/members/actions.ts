@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createMember, updateMember } from "@/lib/grpc/members";
 import { describeGrpcError } from "@/lib/grpc/errors";
+import { formValue, optionalFormValue } from "@/lib/form-data";
 import type { MemberStatus } from "@/lib/grpc/types";
 
 export type FormState = { error?: string };
@@ -17,11 +18,11 @@ export async function createMemberAction(
   let memberId: string;
   try {
     const member = await createMember({
-      firstName: formData.get("firstName") as string,
-      lastName: formData.get("lastName") as string,
-      email: formData.get("email") as string,
-      phone: (formData.get("phone") as string) || undefined,
-      address: (formData.get("address") as string) || undefined,
+      firstName: formValue(formData, "firstName"),
+      lastName: formValue(formData, "lastName"),
+      email: formValue(formData, "email"),
+      phone: optionalFormValue(formData, "phone"),
+      address: optionalFormValue(formData, "address"),
     });
     memberId = member.id;
   } catch (error) {
@@ -39,12 +40,12 @@ export async function updateMemberAction(
   try {
     await updateMember({
       id,
-      firstName: formData.get("firstName") as string,
-      lastName: formData.get("lastName") as string,
-      email: formData.get("email") as string,
-      phone: (formData.get("phone") as string) || undefined,
-      address: (formData.get("address") as string) || undefined,
-      status: formData.get("status") as MemberStatus,
+      firstName: formValue(formData, "firstName"),
+      lastName: formValue(formData, "lastName"),
+      email: formValue(formData, "email"),
+      phone: optionalFormValue(formData, "phone"),
+      address: optionalFormValue(formData, "address"),
+      status: formValue(formData, "status") as MemberStatus,
     });
     revalidatePath("/members");
     revalidatePath(`/members/${id}`);

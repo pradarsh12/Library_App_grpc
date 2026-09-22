@@ -62,11 +62,13 @@ export function Field({
   htmlFor,
   children,
   required,
+  error,
 }: {
   label: string;
   htmlFor: string;
   children: ReactNode;
   required?: boolean;
+  error?: string;
 }) {
   return (
     <div>
@@ -75,8 +77,20 @@ export function Field({
         {required && <span className="text-red-500"> *</span>}
       </label>
       {children}
+      {error && (
+        <p id={`${htmlFor}-error`} className="mt-1 text-sm text-red-600">
+          {error}
+        </p>
+      )}
     </div>
   );
+}
+
+/** Shared aria wiring for an invalid Input/Select inside a Field with `error`. */
+export function fieldErrorProps(htmlFor: string, error?: string) {
+  return error
+    ? { "aria-invalid": true as const, "aria-describedby": `${htmlFor}-error` }
+    : {};
 }
 
 export function ErrorBanner({ message }: { message?: string | null }) {
