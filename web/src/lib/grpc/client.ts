@@ -3,6 +3,7 @@ import "server-only";
 import path from "node:path";
 import * as grpc from "@grpc/grpc-js";
 import * as protoLoader from "@grpc/proto-loader";
+import type { GrpcMethodName } from "./methods";
 
 // This file talks to the Python gRPC server (../../../src/server) directly
 // over @grpc/grpc-js, using the *same* .proto sources it's built from
@@ -84,7 +85,9 @@ const DEFAULT_TIMEOUT_MS = 8_000;
  * Promisifies a unary grpc-js call. The dynamically-loaded clients above
  * have no static method types (they're built at runtime from the .proto
  * files), so callers name the RPC and supply the request/response types
- * explicitly, e.g. `call<GetBookRequest, Book>(bookClient, "GetBook", req)`.
+ * explicitly, e.g. `call<GetBookRequest, Book>(bookClient, BookMethod.GetBook, req)`.
+ * `methodName` is constrained to the names in ./methods rather than a bare
+ * string, so a typo or a renamed .proto rpc is a compile error here.
  *
  * Always passes a deadline: if the backend is down, TCP refuses the
  * connection near-instantly and this rejects fast on its own — but if it's
@@ -94,7 +97,7 @@ const DEFAULT_TIMEOUT_MS = 8_000;
  */
 export function call<TRequest, TResponse>(
   client: grpc.Client,
-  methodName: string,
+  methodName: GrpcMethodName,
   request: TRequest,
   timeoutMs: number = DEFAULT_TIMEOUT_MS
 ): Promise<TResponse> {
