@@ -145,6 +145,44 @@ export function PendingOverlay({
   );
 }
 
+/** A gray pulsing placeholder block, used to build up loading.tsx skeletons. */
+export function Skeleton({ className = "" }: { className?: string }) {
+  return <div className={`animate-pulse rounded bg-slate-200 ${className}`} />;
+}
+
+/**
+ * Skeleton for the books/members/loans list tables, shown by each route's
+ * loading.tsx while the page's server-side data fetch is in flight.
+ */
+export function TableSkeleton({ columns, rows = 6 }: { columns: string[]; rows?: number }) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <table className="min-w-full divide-y divide-slate-200 text-sm">
+        <thead className="bg-slate-50 text-left text-xs font-medium uppercase text-slate-500">
+          <tr>
+            {columns.map((column) => (
+              <th key={column} className="px-4 py-2">
+                {column}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-200">
+          {Array.from({ length: rows }).map((_, i) => (
+            <tr key={i}>
+              {columns.map((column) => (
+                <td key={column} className="px-4 py-2">
+                  <Skeleton className="h-4 w-full max-w-[10rem]" />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function EmptyState({ children }: { children: ReactNode }) {
   return (
     <div className="rounded-md border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
