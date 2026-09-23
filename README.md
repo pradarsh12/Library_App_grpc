@@ -263,6 +263,7 @@ This installs every required library, all pinned in `pyproject.toml`:
 | `grpcio` | The gRPC runtime itself (`grpc.aio` async server) |
 | `grpcio-tools` | Compiles `.proto` files into Python stubs (step 4 below) |
 | `grpcio-reflection` | Powers server reflection, so `grpcurl` works without `.proto` files on the client |
+| `grpcio-health-checking` | Standard `grpc.health.v1.Health` service, kept in sync with real database connectivity |
 | `protobuf` | Protocol Buffers message runtime |
 | `asyncpg` | Async-native PostgreSQL driver |
 | `python-dotenv` | Loads `.env` into the process environment |
@@ -285,6 +286,15 @@ python -m server.main
 
 Logs `Neighborhood Library gRPC server listening on [::]:50051` once it's
 up. Stop with Ctrl+C.
+
+Every RPC is logged once it completes (method, status, duration), and the
+standard `grpc.health.v1.Health` service is registered alongside the app
+services — its status tracks real database connectivity (checked on an
+interval), not just whether the process is running:
+
+```bash
+grpcurl -plaintext localhost:50051 grpc.health.v1.Health/Check
+```
 
 ## Testing the service
 
