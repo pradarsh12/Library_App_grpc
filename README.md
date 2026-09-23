@@ -355,8 +355,18 @@ web/
       books/      list, create, edit + add copies
       members/    list, create, edit
       loans/      borrow, return, active/history view
-    lib/grpc/      client.ts (proto-loader setup), typed wrappers, error mapping
-    components/    shared Tailwind UI primitives
+    lib/
+      grpc/                  client.ts (proto-loader setup), typed wrappers, methods.ts, error mapping
+      form-validation.ts      client-side field checks mirroring server/validation.py's limits
+      form-data.ts             trimmed FormData reads shared by every server action
+      run-mutation.ts          shared try/catch-into-FormState wrapper for mutation actions
+      load-page-data.tsx       shared fetch-or-<FetchErrorState> wrapper for list/detail pages
+      use-validated-form.ts    hook wiring useActionState + client validation for the 4 forms
+      use-dismissing-error.ts  auto-dismissing error banner state
+    components/
+      ui.tsx           shared Tailwind UI primitives (Button, Field, PendingOverlay, ...)
+      data-table.tsx    shared table chrome for the 3 list pages
+      pagination.tsx    Previous/Next controls + URL token parsing
   .env.local.example   GRPC_SERVER_ADDR (defaults to localhost:50051)
 ```
 
@@ -364,6 +374,14 @@ The UI mirrors the backend's capabilities exactly — see
 [What this application can do](#what-this-application-can-do) for the
 full list of supported operations (in short: no delete buttons, since
 there's no delete RPC either).
+
+List pages paginate against the real `ListBooks`/`ListMembers`/`ListLoans`
+cursor (`page_size`/`page_token`, see [Database schema](#database-schema)
+and `proto/library/v1/common.proto`) rather than fetching everything at
+once. Since `PageResponse` only ever returns a *forward* cursor, "Previous"
+is implemented by carrying a stack of visited tokens in the URL
+(`?page=<token>&prev=<comma-joined stack>`, see `components/pagination.tsx`)
+rather than anything the server tracks.
 
 ### Running it
 
@@ -385,3 +403,7 @@ Then open http://localhost:3000.
 - Pagination is offset-based (`page_token` is just a stringified offset) —
   fine for this scope, not snapshot-consistent under concurrent writes.
 - No authentication/authorization layer — out of scope per the assignment.
+- No schema migration tool — `db/schema.sql` is applied once via
+  `docker-entrypoint-initdb.d` on first container start (or manually with
+  `psql`); there's no versioned/repeatable way to apply a schema change to
+  a database that already has data. Still pending a tool choice.
